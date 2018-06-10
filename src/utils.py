@@ -142,7 +142,6 @@ def load_config_items(dir_config):
     return ret
 
 
-
-def filename_from_config(config, dir_out):
+def filename_from_config(config, dir_out, extension='csv'):
     config_name = config.name
-    return os.path.join(dir_out, f'{config_name}.csv')
+    return os.path.join(dir_out, f'{config_name}.{extension}')

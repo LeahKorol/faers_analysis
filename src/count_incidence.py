@@ -65,7 +65,7 @@ def count_incidence(data, config, fn_out, threads):
         print(f'{fn_out} exists. Skipping')
         return
     data['thread'] = data.caseid.apply(lambda i: hash(i) % (threads * 5))
-    chunks = data[['drugname', 'pt', 'thread', 'caseid']].groupby('thread')
+    chunks = data.groupby('thread')
     with Pool(threads) as pool:
         results = list(pool.imap(lambda tup: _actual_count_incidence(tup[1], config), chunks))
     print(f'len results {len(results)}')
@@ -79,7 +79,7 @@ def main(
         year_q_from,
         year_q_to,
         dir_in,
-        dir_config,
+        config_dir,
         dir_out,
         threads=4,
         clean_on_failure=True
@@ -92,7 +92,7 @@ def main(
         XXXXqQ, where XXXX is the year, q is the literal "q" and Q is 1, 2, 3 or 4
     :param str dir_in:
         Input directory
-    :param str dir_config:
+    :param str config_dir:
         Directory with config files
     :param str dir_out:
         Output directory
@@ -111,7 +111,7 @@ def main(
         q_from = Quarter(year_q_from)
         q_to = Quarter(year_q_to)
         data = None
-        config_items = load_config_items(dir_config)
+        config_items = load_config_items(config_dir)
         print(f'Will analyze {len(config_items)} configurations')
         for config in tqdm.tqdm(config_items):
             fn_out = filename_from_config(config, dir_out)

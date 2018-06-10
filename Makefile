@@ -19,7 +19,10 @@ DIR_INTERIM := $(DATA_DIR)/interim
 DIR_PROCESSED := $(DATA_DIR)/processed
 
 DIR_FAERS := $(DIR_EXTERNAL)/faers
-DIR_FAERS_DEDUPLICATED = $(DIR_INTERIM)/faers_deduplicated
+DIR_FAERS_DEDUPLICATED := $(DIR_INTERIM)/faers_deduplicated
+DIR_INCIDENCE := $(DIR_INTERIM)/incidence
+
+N_THREADS = 8
 
 clean:
 	find . -name "*.pyc" -exec rm {} \;
@@ -41,7 +44,16 @@ clean_deduplicated_faers:
 clean_faers:
 	rm -fr $(DIR_FAERS)
 	rm -fr $(DIR_FAERS_DEDUPLICATED)
+	rm -fr $(DIR_INCIDENCE)
 
-faers: get_faers deduplicate_faers
+faers_data: get_faers deduplicate_faers
+
+
+count_incidence: faers_data
+	python src/count_incidence.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-in=$(DIR_FAERS_DEDUPLICATED) --dir-config=$(CONFIG_DIR) --dir-out=$(DIR_INCIDENCE) -t $N_THREADS --no-clean-on-failure
+
+
+clean_incidence:
+	rm -fr $(DIR_INCIDENCE)
 
 
