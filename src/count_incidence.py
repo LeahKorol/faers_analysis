@@ -65,7 +65,7 @@ def count_incidence(data, config, fn_out, threads):
         print(f'{fn_out} exists. Skipping')
         return
     data['thread'] = data.caseid.apply(lambda i: hash(i) % (threads * 5))
-    chunks = data[['drugname', 'pt']].groupby('thread')
+    chunks = data[['drugname', 'pt', 'thread', 'caseid']].groupby('thread')
     with Pool(threads) as pool:
         results = list(pool.imap(lambda tup: _actual_count_incidence(tup[1], config), chunks))
     print(f'len results {len(results)}')
@@ -118,7 +118,7 @@ def main(
             if os.path.exists(fn_out):
                 print(f'File {fn_out} exists. Skipping')
             if data is None:
-                load_data(dir_in, q_from, q_to)
+                data = load_data(dir_in, q_from, q_to)
             count_incidence(data, config, fn_out, threads)
 
     except Exception as err:
