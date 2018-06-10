@@ -73,10 +73,22 @@ class ContingencyMatrix:
         else:
             for c in ['exposure', 'outcome', 'n']:
                 assert c in tbl.columns
-        self.tbl = tbl[['exposure', 'outcome', 'n']]
+        tbl = tbl.set_index(['exposure', 'outcome']).sort_index()
+        for expo in (True, False):
+            for outcome in (True, False):
+                pair = (expo, outcome)
+                if pair not in tbl.index:
+                    row = pd.Series({'n': 0}, name=pair)
+                    tbl = tbl.append(row)
+        self.tbl = tbl.sort_index()
+
+    def __add__(self, other):
+        self.tbl.n += other.tbl.n
+        return self
+
 
     @classmethod
-    def from_results_table(cls, tbl, column_exposure='is_drug', column_outcome='is_reaction'):
+    def from_results_table(cls, tbl, column_exposure='exposure', column_outcome='outcome'):
         contingency_table = tbl.groupby(
             [column_exposure, column_outcome]
         ).apply(len).reset_index().rename(
@@ -90,14 +102,8 @@ class ContingencyMatrix:
         return cls(contingency_table)
 
     def get_count_value(self, exposure, outcome):
-        sel = self.tbl.exposure == exposure
-        sel = sel & (self.tbl.outcome == outcome)
-        if sel.sum() == 0:
-            return 0
-        elif sel.sum() == 1:
-            return self.tbl.loc[sel]['n'].iloc[0]
-        else:
-            raise RuntimeError()
+        ret = self.tbl.loc[(exposure, outcome)]['n']
+        return ret
 
     def ror_components(self):
         a = self.get_count_value(True, True)
@@ -117,7 +123,7 @@ class ContingencyMatrix:
             standard_error_ln_ror = np.sqrt((1 / self.tbl['n']).sum())
             interval = np.multiply(stats.distributions.norm.interval(alpha), standard_error_ln_ror)
             ci_ln_ror = ln_ror + interval
-            ci = np.exp(ci_ln_ror)
+            ci = tuple(np.exp(ci_ln_ror))
             return ror, ci
         else:
             return ror
@@ -138,7 +144,9 @@ def load_config_items(dir_config):
     for f in glob(os.path.join(dir_config, '*.json')):
         name = os.path.split(f)[-1].replace('.json', '')
         config = json.load(open(f))
-        ret.append(QuestionConfig(name, drugs=config['drug'], reactions=config['reaction']))
+        drugs = [d.upper() for d in config['drug']]
+        reactions = [r.upper() for r in config['reaction']]
+        ret.append(QuestionConfig(name, drugs=drugs, reactions=reactions))
     return ret
 
 
