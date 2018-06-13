@@ -83,3 +83,4 @@ target/
 *.lock
 notebooks/dask-worker-space
 ~$*.doc
+~$*.xls*
