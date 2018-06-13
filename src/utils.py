@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from collections import namedtuple
 from glob import glob
@@ -144,7 +145,7 @@ def load_config_items(dir_config):
     for f in glob(os.path.join(dir_config, '*.json')):
         ret.append(config_from_json_file(f))
 
-    for f in glob(os.path.join(dir_config, '*.xls?')):
+    for f in glob(os.path.join(dir_config, '[a-zA-Z0-9]*.xls?')):
         ret.extend(configs_from_excel_file(f))
     return ret
 
@@ -158,13 +159,15 @@ def config_from_json_file(fn):
 
 
 def configs_from_excel_file(fn):
+    name = os.path.splitext(os.path.split(fn)[-1])[0]
     xl = pd.ExcelFile(fn)
     ret = []
     for sheetname in xl.sheet_names:
-        sheetname = xl.sheet_names[0]
-        name = os.path.splitext(os.path.split(fn)[-1])[0]
         tbl = xl.parse(sheetname)
         tbl.columns = [c.lower() for c in tbl.columns]
+        if len(tbl.columns)!= 2:
+            logging.warning(f'Skipping {fn} sheet {sheetname} that has {len(tbl.columns)} columns')
+            continue
         drugs = tbl['drug'].dropna().tolist()
         reactions = tbl['reaction'].dropna().tolist()
         ret.append(QuestionConfig(name, drugs, reactions))
