@@ -109,7 +109,7 @@ def main(
         q_to = Quarter(year_q_to)
         data = None
         config_items = load_config_items(config_dir)
-        print(f'Will analyze {len(config_items)} configurations')
+        print(f'Will analyze {len(config_items)} configurations: ' + ', '.join([c.name for c in config_items]))
         for config in tqdm.tqdm(config_items):
             fn_out = filename_from_config(config, dir_out)
             if os.path.exists(fn_out):

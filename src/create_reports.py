@@ -57,7 +57,7 @@ def main(
     os.makedirs(dir_out, exist_ok=True)
     try:
         config_items = load_config_items(config_dir)
-        print(f'Will analyze {len(config_items)} configurations')
+        print(f'Will analyze {len(config_items)} configurations: ' + ', '.join([c.name for c in config_items]))
         for config in tqdm.tqdm(config_items):
             dir_out = filename_from_config(config, dir_out, extension='')
             if os.path.exists(dir_out):
