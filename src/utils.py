@@ -142,13 +142,33 @@ QuestionConfig = namedtuple('QuestionConfig', ['name', 'drugs', 'reactions'])
 def load_config_items(dir_config):
     ret = []
     for f in glob(os.path.join(dir_config, '*.json')):
-        name = os.path.split(f)[-1].replace('.json', '')
-        config = json.load(open(f))
-        drugs = [d.upper() for d in config['drug']]
-        reactions = [r.upper() for r in config['reaction']]
-        ret.append(QuestionConfig(name, drugs=drugs, reactions=reactions))
+        ret.append(config_from_json_file(f))
+
+    for f in glob(os.path.join(dir_config, '*.xls?')):
+        ret.extend(configs_from_excel_file(f))
     return ret
 
+
+def config_from_json_file(fn):
+    name = os.path.split(fn)[-1].replace('.json', '')
+    config = json.load(open(fn))
+    drugs = [d.upper() for d in config['drug']]
+    reactions = [r.upper() for r in config['reaction']]
+    return QuestionConfig(name, drugs=drugs, reactions=reactions)
+
+
+def configs_from_excel_file(fn):
+    xl = pd.ExcelFile(fn)
+    ret = []
+    for sheetname in xl.sheet_names:
+        sheetname = xl.sheet_names[0]
+        name = os.path.splitext(os.path.split(fn)[-1])[0]
+        tbl = xl.parse(sheetname)
+        tbl.columns = [c.lower() for c in tbl.columns]
+        drugs = tbl['drug'].dropna().tolist()
+        reactions = tbl['reaction'].dropna().tolist()
+        ret.append(QuestionConfig(name, drugs, reactions))
+    return ret
 
 def filename_from_config(config, directory, extension='csv'):
     config_name = config.name
