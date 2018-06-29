@@ -9,6 +9,8 @@ import numpy as np
 import scipy.stats as stats
 import re
 
+import tqdm
+
 
 class Quarter:
     def __init__(self, *args):
@@ -74,6 +76,8 @@ class ContingencyMatrix:
         else:
             for c in ['exposure', 'outcome', 'n']:
                 assert c in tbl.columns
+        for c in ['exposure', 'outcome']:
+            tbl[c] = tbl[c].astype(bool)
         tbl = tbl.set_index(['exposure', 'outcome']).sort_index()
         for expo in (True, False):
             for outcome in (True, False):
@@ -99,30 +103,37 @@ class ContingencyMatrix:
                 0: 'n'
             }
         )
-
+        if len(contingency_table) > 4:
+            print('error')
+        assert len(contingency_table) <= 4
         return cls(contingency_table)
 
     def get_count_value(self, exposure, outcome):
         ret = self.tbl.loc[(exposure, outcome)]['n']
         return ret
 
-    def ror_components(self):
+    def ror_components(self, smoothing=0):
+        # Smoothing is mentioned here https://pdfs.semanticscholar.org/9639/66a1e9ee60bfcdb13a1a98527022c7cc59ba.pdf
         a = self.get_count_value(True, True)
         b = self.get_count_value(True, False)
         c = self.get_count_value(False, True)
         d = self.get_count_value(False, False)
         assert a + b + c + d == self.tbl.n.sum()
-        return (a, b, c, d)
+        if smoothing < 0:
+            smoothing = 1 / self.tbl.n.sum()
+        return (a+smoothing, b+smoothing, c+smoothing, d+smoothing)
 
-    def ror(self, alpha=0.05):
+    def ror(self, alpha=0.05, smoothing=0):
         # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2938757/
-        a, b, c, d = self.ror_components()
+        a, b, c, d = self.ror_components(smoothing=smoothing)
         ror = (a * d) / (b * c)
         if alpha is not None:
             # eq 2 from https://arxiv.org/pdf/1307.1078.pdf
             ln_ror = np.log(ror)
-            standard_error_ln_ror = np.sqrt((1 / self.tbl['n']).sum())
-            interval = np.multiply(stats.distributions.norm.interval(alpha), standard_error_ln_ror)
+            standard_error_ln_ror = np.sqrt(
+                1 / a + 1 / b + 1 / c + 1 / d
+            )
+            interval = np.multiply(stats.distributions.norm.interval(1-alpha), standard_error_ln_ror)
             ci_ln_ror = ln_ror + interval
             ci = tuple(np.exp(ci_ln_ror))
             return ror, ci
@@ -150,11 +161,19 @@ def load_config_items(dir_config):
     return ret
 
 
+def normalize_reaction_name(r):
+    return r.strip().upper()
+
+
+def normalize_drug_name(d):
+    return d.strip().upper()
+
+
 def config_from_json_file(fn):
     name = os.path.split(fn)[-1].replace('.json', '')
     config = json.load(open(fn))
-    drugs = [d.upper() for d in config['drug']]
-    reactions = [r.upper() for r in config['reaction']]
+    drugs = [normalize_drug_name(d) for d in config['drug']]
+    reactions = [normalize_reaction_name(r) for r in config['reaction']]
     return QuestionConfig(name, drugs=drugs, reactions=reactions)
 
 
@@ -170,9 +189,33 @@ def configs_from_excel_file(fn):
             continue
         drugs = tbl['drug'].dropna().tolist()
         reactions = tbl['reaction'].dropna().tolist()
-        ret.append(QuestionConfig(name, drugs, reactions))
+        drugs = [normalize_drug_name(d) for d in drugs]
+        reactions = [normalize_reaction_name(r) for r in reactions]
+        ret.append(QuestionConfig(f'{name} - {sheetname}',
+                                  drugs=drugs, reactions=reactions
+        ))
     return ret
 
-def filename_from_config(config, directory, extension='csv'):
+def filename_from_config(config, directory, extension='.csv'):
+    if extension:
+        assert extension.startswith('.')
     config_name = config.name
-    return os.path.join(directory, f'{config_name}.{extension}')
+    return os.path.join(directory, f'{config_name}{extension}')
+
+
+
+if __name__ == '__main__':
+    import pandas as pd
+    import io
+
+    tbl = pd.read_table(io.StringIO("""exposure	outcome	n
+    0	0	 4050884 
+    0	1	 3166 
+    1	0	 235 
+    1	1	 3 """))
+    tbl.exposure = tbl.exposure.astype(bool)
+    tbl.outcome = tbl.outcome.astype(bool)
+
+    cm = ContingencyMatrix(tbl)
+    ror = cm.ror()
+    print('fia')

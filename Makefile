@@ -1,4 +1,4 @@
-.PHONY: clean all report
+.PHONY: clean report
 SHELL := /bin/bash
 
 QUARTER_FROM := 2013q1
@@ -20,9 +20,13 @@ DIR_PROCESSED := $(DATA_DIR)/processed
 
 DIR_FAERS := $(DIR_EXTERNAL)/faers
 DIR_FAERS_DEDUPLICATED := $(DIR_INTERIM)/faers_deduplicated
-DIR_INCIDENCE := $(DIR_INTERIM)/incidence
+DIR_MARKED_FILES := $(DIR_INTERIM)/marked_data
 DIR_CONTINGENCY := $(DIR_INTERIM)/contingency
+DIR_REPORTS := $(DIR_PROCESSED)/reports
 N_THREADS = 8
+
+all: report
+
 
 clean:
 	find . -name "*.pyc" -exec rm {} \;
@@ -47,20 +51,31 @@ clean_faers:
 	@make clean_processed
 
 clean_processed:
+	rm -fr $(DIR_MARKED_FILES)
 	rm -fr $(DIR_INCIDENCE)
 	rm -fr $(DIR_CONTINGENCY)
+	rm -fr $(DIR_REPORTS)
 
 faers_data: get_faers deduplicate_faers
 
 
-count_incidence: faers_data
-	python src/count_incidence.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-in=$(DIR_FAERS_DEDUPLICATED) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_INCIDENCE) -t $(N_THREADS) --no-clean-on-failure
+mark_incidence: faers_data
+	python src/mark_incidence_data.py --skip-if-exists --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-in=$(DIR_FAERS_DEDUPLICATED) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_MARKED_FILES) --no-clean-on-failure -t $(N_THREADS)
 
-clean_incidence:
-	rm -fr $(DIR_INCIDENCE)
 
-contingency_matrices: count_incidence
-	python src/compute_contingency_matrices.py --dir-incidence=$(DIR_INCIDENCE) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_CONTINGENCY)
+clean_marked_files:
+	rm -fr $(DIR_MARKED_FILES)
+
+contingency: $(DIR_CONTINGENCY)
+$(DIR_CONTINGENCY): mark_incidence
+	python src/compute_contingency_matrices.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO)  --dir-in=$(DIR_MARKED_FILES) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_CONTINGENCY) -t $(N_THREADS)
 
 clean_contingency:
 	rm -fr $(DIR_CONTINGENCY)
+
+
+report: contingency
+	python src/generate_reports.py --dir-contingency=$(DIR_CONTINGENCY) --config-dir=$(CONFIG_DIR) --dir-reports=$(DIR_REPORTS)
+
+clean_reports:
+	rm -fr $(DIR_REPORTS)
