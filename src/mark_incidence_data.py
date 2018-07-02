@@ -8,7 +8,7 @@ import defopt
 from pathos.multiprocessing import ProcessingPool as Pool
 import tqdm
 
-from src.utils import Quarter, load_config_items, filename_from_config, generate_quarters
+from src.utils import Quarter, generate_quarters, QuestionConfig
 
 
 def load_quarter_data(dir_data, q):
@@ -33,17 +33,13 @@ def load_quarter_data(dir_data, q):
     return df_merged
 
 
-def mark_incidence_data(q, df, drug_names, reaction_types, skip_if_exists):
+def mark_incidence_data(q, df, drug_names, reaction_types):
     tups = []
     for d in drug_names:
         column_name = f'drug {d}'
-        if column_name in df and skip_if_exists:
-            continue
         tups.append(('drugname', d, column_name))
     for r in reaction_types:
         column_name = f'reaction {r}'
-        if column_name in df and skip_if_exists:
-            continue
         tups.append(('pt', r,  column_name))
 
     with warnings.catch_warnings():
@@ -52,29 +48,28 @@ def mark_incidence_data(q, df, drug_names, reaction_types, skip_if_exists):
             pos = int(str(q)[-1])
         except:
             pos = 5
+        added_columns = []
         for tup in tqdm.tqdm(tups, desc=str(q), position=pos, leave=False):
             ref_column_name, item_name, new_column_name = tup
             df[new_column_name] = (df[ref_column_name] == item_name).values
+            added_columns.append(new_column_name)
+    ret = df.groupby('caseid')[added_columns].any().reset_index()
+    return ret
 
-    return df
 
 
-
-def _actual_mark_incidence(q, dir_in, dir_out, drug_names, reaction_types, skip_if_exists):
+def _actual_mark_incidence(q, dir_in, dir_out, drug_names, reaction_types):
     fn_out = os.path.join(dir_out, f'{str(q)}.csv')
-    if os.path.exists(fn_out):
-        df_curr = pd.read_csv(fn_out)
-    else:
-        df_curr = load_quarter_data(dir_in, q)
-    df_curr = mark_incidence_data(q, df_curr, drug_names, reaction_types, skip_if_exists)
-    df_curr.to_csv(fn_out, index=False)
+    df_curr = load_quarter_data(dir_in, q)
+    df_marked_curr = mark_incidence_data(q, df_curr, drug_names, reaction_types)
+    df_marked_curr.to_csv(fn_out, index=False)
     counters = dict()
     for d in drug_names:
         cn = f'drug {d}'
-        counters[cn] = df_curr[cn].sum()
+        counters[cn] = df_marked_curr[cn].sum()
     for r in reaction_types:
         cn = f'reaction {r}'
-        counters[cn] = df_curr[cn].sum()
+        counters[cn] = df_marked_curr[cn].sum()
     return counters
 
 
@@ -87,7 +82,6 @@ def main(
         dir_in,
         config_dir,
         dir_out,
-        skip_if_exists=False,
         threads=4,
         clean_on_failure=True
 ):
@@ -105,8 +99,6 @@ def main(
         Directory with config files
     :param str dir_out:
         Output directory
-    :param bool skip_if_exists:
-        If a column exists in the output file, leave it and skip the computation
     :param int threads:
         Threads in parallel processing
     :param bool clean_on_failure:
@@ -121,7 +113,7 @@ def main(
     try:
         q_from = Quarter(year_q_from)
         q_to = Quarter(year_q_to)
-        config_items = load_config_items(config_dir)
+        config_items = QuestionConfig.load_config_items(config_dir)
         drug_names = set()
         reaction_types = set()
         for config in config_items:
@@ -134,7 +126,7 @@ def main(
                 tqdm.tqdm(
                     pool.imap(
                         lambda q: _actual_mark_incidence(
-                            q, dir_in, dir_out, drug_names, reaction_types, skip_if_exists
+                            q, dir_in, dir_out, drug_names, reaction_types
                         ), quarters
                     ),
                     total=len(quarters)

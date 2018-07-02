@@ -6,7 +6,7 @@ from pathos.multiprocessing import ProcessingPool as Pool
 import tqdm
 import numpy as np
 
-from src.utils import Quarter, generate_quarters, load_config_items, filename_from_config, ContingencyMatrix
+from src.utils import Quarter, generate_quarters, QuestionConfig, ContingencyMatrix
 
 
 def count_quarter_incidence(q, dir_in, config_items):
@@ -68,7 +68,7 @@ def main(
     try:
         q_from = Quarter(year_q_from)
         q_to = Quarter(year_q_to)
-        config_items = load_config_items(config_dir)
+        config_items = QuestionConfig.load_config_items(config_dir)
         print(f'Will analyze {len(config_items)} configurations: ' + ', '.join([c.name for c in config_items]))
         quarters = list(generate_quarters(q_from, q_to))
         with Pool(threads) as pool:
@@ -89,7 +89,7 @@ def main(
                     print('h')
                 assert len(cm.tbl) == 4
             df = pd.concat([cm.tbl for cm in cms]).reset_index().set_index('q').sort_index()
-            fn = filename_from_config(config, directory=dir_out, extension='.csv')
+            fn = config.filename_from_config(directory=dir_out, extension='.csv')
             df.to_csv(fn)
 
 
