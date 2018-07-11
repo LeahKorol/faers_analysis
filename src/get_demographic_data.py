@@ -40,44 +40,6 @@ def get_relevant_cases(fn_marked, config, nrows=None):
         ]
 
 
-def read_demo_data(fn_demo):
-    dtypes = {
-        'caseid': str,
-        'event_dt_num': str,
-        'age': float,
-        'age_cod': str,
-        'sex': str,
-        'wt': float,
-        'wt_cod': str
-    }
-    df_demo = pd.read_csv(
-        fn_demo,
-        dtype=dtypes,
-        usecols=dtypes.keys()
-    )
-
-    to_year_conversion_factor = {
-        'YR': 1.0,
-        'DY': 365.25,
-        'MON': 12,
-        'DEC': 0.1,
-        'WK': 52.2,
-        'HR': 24 * 365.25
-    }
-    to_year_conversion_factor = pd.Series(to_year_conversion_factor)
-
-    to_kg_conversion_factor = {
-        'KG': 1.0,
-        'LBS': 2.20462
-    }
-    to_kg_conversion_factor = pd.Series(to_kg_conversion_factor)
-    df_demo.wt = df_demo.wt / to_kg_conversion_factor.reindex(df_demo.wt_cod.values).values
-    df_demo.age = df_demo.age / to_year_conversion_factor.reindex(df_demo.age_cod.values).values
-    df_demo['event_date'] = pd.to_datetime(df_demo.event_dt_num, dayfirst=False, errors='ignore')
-    df_demo.drop(['age_cod', 'wt_cod', 'event_dt_num'], axis=1, inplace=True)
-    return df_demo
-
-
 def process_a_config(q_start, q_end, dir_marked_data, dir_raw_demography_data, dir_out, config):
     os.makedirs(dir_out, exist_ok=True)
     quarters = list(generate_quarters(q_start, q_end))

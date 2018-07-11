@@ -9,8 +9,7 @@ import seaborn.apionly as sns
 import tqdm
 import numpy as np
 
-from src.utils import Quarter, generate_quarters, load_config_items, filename_from_config, ContingencyMatrix
-
+from src.utils import ContingencyMatrix, QuestionConfig
 
 
 def plot_incidence(tbl_report, ax=None, figwidth=8, dpi=300):
@@ -49,7 +48,6 @@ def plot_ror(tbl_report, ax_ror=None, xticklabels=True, figwidth=8, dpi=300):
     if ax_ror is None:
         fig_ror, ax_ror = plt.subplots(figsize=figsize, dpi=dpi)
     quarters = list(sorted(tbl_report.q.unique())) # we assume no Q is missing
-    quarters
     x = list(range(len(quarters)))
 
     ax_ror.plot(x, tbl_report.l10_ROR, '-o', color='C0', zorder=99)
@@ -198,11 +196,11 @@ def main(
     dir_reports = os.path.abspath(dir_reports)
     os.makedirs(dir_reports, exist_ok=True)
     try:
-        config_items = load_config_items(config_dir)
+        config_items = QuestionConfig.load_config_items(config_dir)
         print(f'Will analyze {len(config_items)} configurations: ' + ', '.join([c.name for c in config_items]))
         results = dict()
         for config in tqdm.tqdm(config_items):
-            fn_in = filename_from_config(config, dir_contingency)
+            fn_in = config.filename_from_config(dir_contingency)
             df_summary_curr = generate_individual_report(config=config, fn_in=fn_in, dir_reports=dir_reports, alpha=alpha, smoothing=smoothing, title_in_figure=title_in_figure)
             df_summary_curr['config'] = config.name
             results[config.name] = df_summary_curr

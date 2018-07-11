@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -10,6 +11,23 @@ import scipy.stats as stats
 import re
 
 import tqdm
+import base64
+
+def html_from_fig(fig, caption=None, width=None):
+    figfile = io.BytesIO()
+    fig.savefig(figfile, format='png')
+    figfile.seek(0)  # rewind to beginning of file
+    figdata_png = figfile.getvalue()  # extract string (stream of bytes)
+    figdata_png = base64.b64encode(figdata_png).decode('utf8')
+    if width is None:
+        width = ''
+    else:
+        width =  f'width="{width}"'
+    ret = f'<figure><img src="data:image/png;base64,{figdata_png}"{width}>'
+    if caption is not None:
+        ret += f'<figcaption>{caption}</figcaption>'
+    ret += '</figure>'
+    return ret
 
 
 class Quarter:
@@ -74,17 +92,23 @@ class ContingencyMatrix:
         if tbl is None:
             tbl = pd.DataFrame(columns=['exposure', 'outcome', 'n'])
         else:
-            for c in ['exposure', 'outcome', 'n']:
-                assert c in tbl.columns
-        for c in ['exposure', 'outcome']:
-            tbl[c] = tbl[c].astype(bool)
-        tbl = tbl.set_index(['exposure', 'outcome']).sort_index()
-        for expo in (True, False):
-            for outcome in (True, False):
-                pair = (expo, outcome)
-                if pair not in tbl.index:
-                    row = pd.Series({'n': 0}, name=pair)
-                    tbl = tbl.append(row)
+            if tbl.shape == (2,2):
+                tbl = pd.melt(
+                    tbl.reset_index().fillna(0), id_vars=['exposure'], value_vars=[False, True], value_name='n'
+                ).set_index(['exposure', 'outcome']).sort_index()
+            else:
+
+                for c in ['exposure', 'outcome', 'n']:
+                    assert c in tbl.columns
+                for c in ['exposure', 'outcome']:
+                    tbl[c] = tbl[c].astype(bool)
+                tbl = tbl.set_index(['exposure', 'outcome']).sort_index()
+                for expo in (True, False):
+                    for outcome in (True, False):
+                        pair = (expo, outcome)
+                        if pair not in tbl.index:
+                            row = pd.Series({'n': 0}, name=pair)
+                            tbl = tbl.append(row)
         self.tbl = tbl.sort_index()
 
     def __add__(self, other):
@@ -93,20 +117,17 @@ class ContingencyMatrix:
 
 
     @classmethod
-    def from_results_table(cls, tbl, column_exposure='exposure', column_outcome='outcome'):
-        contingency_table = tbl.groupby(
-            [column_exposure, column_outcome]
-        ).apply(len).reset_index().rename(
-            columns={
-                column_exposure: 'exposure',
-                column_outcome: 'outcome',
-                0: 'n'
-            }
+    def from_results_table(cls, data, config):
+        exposure = data[f'exposed {config.name}']
+        exposure.name = 'exposure'
+        outcome = data[f'reacted {config.name}']
+        outcome.name = 'outcome'
+        crosstab = pd.crosstab(exposure, outcome).reindex(
+            [False, True], axis=0, fill_value=0
+        ).reindex(
+            [False, True], axis=1, fill_value=0
         )
-        if len(contingency_table) > 4:
-            print('error')
-        assert len(contingency_table) <= 4
-        return cls(contingency_table)
+        return ContingencyMatrix(crosstab)
 
     def get_count_value(self, exposure, outcome):
         ret = self.tbl.loc[(exposure, outcome)]['n']
@@ -126,19 +147,32 @@ class ContingencyMatrix:
     def ror(self, alpha=0.05, smoothing=0):
         # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2938757/
         a, b, c, d = self.ror_components(smoothing=smoothing)
-        ror = (a * d) / (b * c)
+        nominator = a * c
+        denominator = b * c
+        if denominator:
+            ror = (a * d) / (b * c)
+        else:
+            ror = np.nan
         if alpha is not None:
-            # eq 2 from https://arxiv.org/pdf/1307.1078.pdf
-            ln_ror = np.log(ror)
-            standard_error_ln_ror = np.sqrt(
-                1 / a + 1 / b + 1 / c + 1 / d
-            )
-            interval = np.multiply(stats.distributions.norm.interval(1-alpha), standard_error_ln_ror)
-            ci_ln_ror = ln_ror + interval
-            ci = tuple(np.exp(ci_ln_ror))
+            if np.all(np.array([a, b, c, d], dtype=bool)):
+                # eq 2 from https://arxiv.org/pdf/1307.1078.pdf
+                ln_ror = np.log(ror)
+                standard_error_ln_ror = np.sqrt(
+                    1 / a + 1 / b + 1 / c + 1 / d
+                )
+                interval = np.multiply(stats.distributions.norm.interval(1-alpha), standard_error_ln_ror)
+                ci_ln_ror = ln_ror + interval
+                ci = tuple(np.exp(ci_ln_ror))
+            else:
+                ci = (np.nan, np.nan)
             return ror, ci
         else:
             return ror
+
+
+    def crosstab(self):
+        ret = self.tbl.pivot_table(values='n', index='exposure', columns='outcome', aggfunc='sum')
+        return ret
 
     def __str__(self):
         ret = 'Contingency matrix\n' + str(self.tbl)
@@ -214,19 +248,40 @@ class QuestionConfig:
 
 
 
+def read_demo_data(fn_demo, **kwargs):
+    dtypes = {
+        'caseid': str,
+        'event_dt_num': str,
+        'age': float,
+        'age_cod': str,
+        'sex': str,
+        'wt': float,
+        'wt_cod': str
+    }
+    df_demo = pd.read_csv(
+        fn_demo,
+        dtype=dtypes,
+        usecols=dtypes.keys(),
+        **kwargs
+    )
 
-if __name__ == '__main__':
-    import pandas as pd
-    import io
+    to_year_conversion_factor = {
+        'YR': 1.0,
+        'DY': 365.25,
+        'MON': 12,
+        'DEC': 0.1,
+        'WK': 52.2,
+        'HR': 24 * 365.25
+    }
+    to_year_conversion_factor = pd.Series(to_year_conversion_factor)
 
-    tbl = pd.read_table(io.StringIO("""exposure	outcome	n
-    0	0	 4050884 
-    0	1	 3166 
-    1	0	 235 
-    1	1	 3 """))
-    tbl.exposure = tbl.exposure.astype(bool)
-    tbl.outcome = tbl.outcome.astype(bool)
-
-    cm = ContingencyMatrix(tbl)
-    ror = cm.ror()
-    print('fia')
+    to_kg_conversion_factor = {
+        'KG': 1.0,
+        'LBS': 2.20462
+    }
+    to_kg_conversion_factor = pd.Series(to_kg_conversion_factor)
+    df_demo.wt = df_demo.wt / to_kg_conversion_factor.reindex(df_demo.wt_cod.values).values
+    df_demo.age = df_demo.age / to_year_conversion_factor.reindex(df_demo.age_cod.values).values
+    df_demo['event_date'] = pd.to_datetime(df_demo.event_dt_num, dayfirst=False, errors='ignore')
+    df_demo.drop(['age_cod', 'wt_cod', 'event_dt_num'], axis=1, inplace=True)
+    return df_demo

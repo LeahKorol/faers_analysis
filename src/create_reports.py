@@ -9,7 +9,6 @@ import numpy as np
 from src.utils import Quarter, generate_quarters, load_config_items, filename_from_config, ContingencyMatrix
 
 
-
 def report_from_config(config, fn_in, dir_out, alpha):
     config_name = config.name
     contingency_matrices = pd.read_csv(fn_in)
@@ -25,7 +24,6 @@ def report_from_config(config, fn_in, dir_out, alpha):
             'ROR_upper': ror[1][1]
         })
     tbl_report = pd.DataFrame.from_records(tbl_report)
-
 
 
 def main(
@@ -73,16 +71,5 @@ def main(
         raise err
 
 
-
-if __name__ == '__massssin__':
-    defopt.run(main)
-
-
 if __name__ == '__main__':
-    contingency_matrices = pd.read_csv('/Users/boris/devel/faers/data/interim/contingency/belviq.csv')
-    gr = contingency_matrices.groupby('q')
-    for q, t in gr:
-        t = ContingencyMatrix(t)
-        break
-    ror = t.ror_components()
-    print(ror)
+    defopt.run(main)

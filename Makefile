@@ -63,10 +63,10 @@ clean_processed:
 faers_data: get_faers deduplicate_faers
 
 
-mark_incidence: $(DIR_MARKED_FILES)
+mark_data: $(DIR_MARKED_FILES)
 
 $(DIR_MARKED_FILES): faers_data
-	python src/mark_incidence_data.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-in=$(DIR_FAERS_DEDUPLICATED) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_MARKED_FILES) --no-clean-on-failure -t $(N_THREADS)
+	python src/mark_data.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-in=$(DIR_FAERS_DEDUPLICATED) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_MARKED_FILES) --no-clean-on-failure -t 1
 
 
 clean_marked_files:
@@ -74,7 +74,7 @@ clean_marked_files:
 
 contingency: $(DIR_CONTINGENCY)
 $(DIR_CONTINGENCY): mark_incidence
-	python src/compute_contingency_matrices.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO)  --dir-in=$(DIR_MARKED_FILES) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_CONTINGENCY) -t $(N_THREADS)
+	python src/compute_contingency_matrices.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO)  --dir-in=$(DIR_MARKED_FILES) --config-dir=$(CONFIG_DIR) --dir-out=$(DIR_CONTINGENCY) -t 1
 
 clean_contingency:
 	rm -fr $(DIR_CONTINGENCY)
@@ -82,7 +82,7 @@ clean_contingency:
 
 get_demography: $(DIR_DEMOGRAPHIC)
 $(DIR_DEMOGRAPHIC): $(DIR_MARKED_FILES)
-	python src/get_demographic_data.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-marked-data $(DIR_MARKED_FILES) --dir-raw-demography-data $(DIR_FAERS) --dir-config $(CONFIG_DIR) --dir-out $(DIR_DEMOGRAPHIC) -t $(N_THREADS) --clean-on-failure
+	python src/get_demographic_data.py --year-q-from=$(QUARTER_FROM) --year-q-to=$(QUARTER_TO) --dir-marked-data $(DIR_MARKED_FILES) --dir-raw-demography-data $(DIR_FAERS) --dir-config $(CONFIG_DIR) --dir-out $(DIR_DEMOGRAPHIC) -t 1 --clean-on-failure
 
 clean_demography:
 	rm -fr $(DIR_DEMOGRAPHIC)
@@ -92,7 +92,7 @@ clean_demography:
 demography: $(DIR_DEMOGRAPHIC_SUMMARY)
 
 $(DIR_DEMOGRAPHIC_SUMMARY): get_demography
-	python src/summarize_demographic_data.py --dir-demography-data $(DIR_DEMOGRAPHIC) --dir-config $(CONFIG_DIR) --dir-out $(DIR_DEMOGRAPHIC_SUMMARY) -t $(N_THREADS) --clean-on-failure
+	python src/summarize_demographic_data.py --dir-demography-data $(DIR_DEMOGRAPHIC) --dir-config $(CONFIG_DIR) --dir-out $(DIR_DEMOGRAPHIC_SUMMARY)  --clean-on-failure
 
 report: contingency demography
 	python src/generate_reports.py --dir-contingency=$(DIR_CONTINGENCY) --config-dir=$(CONFIG_DIR) --dir-reports=$(DIR_REPORTS)
