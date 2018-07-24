@@ -2,24 +2,27 @@
 import pickle
 from glob import glob
 
+import defopt
+import numpy as np
 import pandas as pd
-import seaborn.apionly as sns
+import seaborn as sns
 import statsmodels.api as sm
 import tqdm
 from gevent import os
 from matplotlib import pylab as plt
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-import numpy as np
+
 from src.utils import html_from_fig, ContingencyMatrix, QuestionConfig
 
 
 class Reporter:
-    FORMATS = ['png', 'eps']
+    FORMATS = ['png']
 
-    def __init__(self, config, dir_out):
+    def __init__(self, config, dir_out, dir_raw_data):
         self.config = config
         self.title = config.name
         self.dir_out = os.path.join(dir_out, self.title)
+        self.dir_raw_data = dir_raw_data
         for format_ in self.FORMATS:
             os.makedirs(
                 os.path.join(
@@ -43,30 +46,40 @@ class Reporter:
             fig.savefig(fn, dpi=360)
         return html
 
-    def report(self, data, title, explanation=None):
+    def report(self, data, title, config, explanation=None, skip_lr=False):
         lines = []
         lines.append(f'<H1>{self.title}</H1>')
         if explanation is not None:
             lines.append(explanation)
-        summary = self.summarize_data(data, title)
+        data = self.handle_controls(data, config)
+        summary = self.summarize_data(data, title, config, skip_lr=skip_lr)
         lines.append(summary)
         fn = os.path.join(self.dir_out, f'report {self.config.name} {title}.html')
         open(fn, 'w').write('\n'.join(lines))
         print(f'Saved {fn}')
 
-    def summarize_data(self, data, title):
+    def handle_controls(self, data, config):
+        if config.control is None:
+            return data
+        control_col = f'control {config.name}'
+        col_exposure = f'drug {config.name}'
+        sel = data[control_col] | data[col_exposure]
+        print(f'{config.name:40s}: Due to control handling, removing {(1-sel.mean())*100:.1f}% of lines')
+        return data.loc[sel]
+
+    def summarize_data(self, data, title, config, skip_lr=False):
         lines = ['<H2>%s</H2>' % title]
         lines.append(self.demographic_summary(data))
         lines.append(self.ror_dynamics(data))
-        lines.append(self.regression_analysis(data))
-        lines.append(self.true_true(data))
+        if not skip_lr:
+            lines.append(self.regression_analysis(data))
+        lines.append(self.true_true(data, config))
 
         return '\n'.join(lines)
 
-
-    def true_true(self, data):
+    def true_true(self, data, config):
         lines = ['<h3> True-True cases </h3>']
-        col_exposure = f'exposed {config.name}'
+        col_exposure = f'drug {config.name}'
         col_ouctome = f'reacted {config.name}'
         true_true_data = data.loc[
             data[col_exposure] & data[col_ouctome]
@@ -75,7 +88,7 @@ class Reporter:
             true_true_data[c] = np.round(true_true_data[c], 1)
         true_true_data.index += 1
         lines.append(true_true_data.to_html())
-        
+
         lines.append('<h3>True-False cases</h3>')
         true_false_data = data.loc[
             data[col_exposure] & (~data[col_ouctome])
@@ -84,16 +97,13 @@ class Reporter:
             true_false_data[c] = np.round(true_false_data[c], 1)
         true_false_data.index += 1
         lines.append(true_false_data.to_html())
-        
+
         return '\n'.join(lines)
-
-
-
 
     def regression_analysis(self, data_regression):
         config = self.config
         data_regression = data_regression.copy()
-        col_exposure = f'exposed {config.name}'
+        col_exposure = f'drug {config.name}'
         col_ouctome = f'reacted {config.name}'
 
         data_regression['exposure'] = data_regression[col_exposure].astype(int)
@@ -116,7 +126,6 @@ class Reporter:
             or_estimates['OR'] = result.params
             or_estimates = np.round(np.exp(or_estimates)[['lower', 'OR', 'upper']], 3)
             or_estimates = 'OR estimates<br>' + or_estimates.to_html()
-
 
         html_summary = '<h3>Logistic regression</h3>\n' \
                        + result_summary \
@@ -165,9 +174,19 @@ class Reporter:
         lines.append(cm.crosstab().to_html())
         return '\n'.join(lines)
 
+    def count_serious_outcomes(self, outcome_cases):
+        # We assume that if a case ID is listed in `outcome*.csv.zip` it is
+        # a "serious" outcome
+        outcome_files = glob(os.path.join(self.dir_raw_data, 'outc*.csv.zip'))
+        serious_outcomes = set()
+        for f in outcome_files:
+            serious_outcomes.update(pd.read_csv(f, usecols=['caseid'], dtype=str).caseid.values)
+        n_serious = np.sum([c in serious_outcomes for c in outcome_cases])
+        return n_serious
+
     def demographic_table(self, data):
         config = self.config
-        col_exposure = f'exposed {config.name}'
+        col_exposure = f'drug {config.name}'
         col_ouctome = f'reacted {config.name}'
         table_rows = []
         for exposure in 'all', True, False:
@@ -212,13 +231,23 @@ class Reporter:
                         female_to_male
                     ])
                 table_rows.append(['--'] * len(table_rows[-1]))
-                summary_table = pd.DataFrame(
-                    table_rows,
-                    columns=['Exposure', 'Outcome', 'Gender', 'N', 'Age', 'Age range', 'Weight', 'Weight range', 'Female : Male'
-                             ]
-                )
-                html_table = summary_table.to_html(index=False)
-        return '<h4>Demographic summary</h4>\n' + html_table
+        summary_table = pd.DataFrame(
+            table_rows,
+            columns=['Exposure', 'Outcome', 'Gender', 'N', 'Age', 'Age range', 'Weight', 'Weight range',
+                     'Female : Male'
+                     ]
+        )
+        html_table = summary_table.to_html(index=False)
+        additional_rows = []
+        cases_with_outcome = set(data.loc[data[col_ouctome]].index)
+        n_serious = self.count_serious_outcomes(cases_with_outcome)
+        p_serious = 100 * n_serious / len(cases_with_outcome)
+        additional_rows.append(
+            f'Of {len(data):,d} cases, {len(cases_with_outcome):,d} had a reaction. Of them {n_serious:,d} ({p_serious:.1f}%) were serious ones')
+
+        ret = '<h4>Demographic summary</h4>\n' + html_table + '<br>\n'.join(additional_rows)
+
+        return ret
 
     def ror_dynamics(self, data):
         lines = []
@@ -300,10 +329,10 @@ class Reporter:
 
 def filter_illegal_values(data):
     sel = (
-        (data.wt > 0) & (data.wt < 360)
-    ) & (
-        (data.age > 0) & (data.age < 120)
-    )
+                  (data.wt > 0) & (data.wt < 360)
+          ) & (
+                  (data.age > 0) & (data.age < 120)
+          )
     return data.loc[sel]
 
 
@@ -312,7 +341,7 @@ def filter_data_for_regression(data, config):
     percentile_lower = (100 - percentile_) / 2
     percentile_upper = 100 - percentile_lower
 
-    col_exposure = f'exposed {config.name}'
+    col_exposure = f'drug {config.name}'
     data_exposed = data.loc[data[col_exposure]]
     age_from, age_to = np.percentile(data_exposed.age, [percentile_lower, percentile_upper])
     weight_from, weight_to = np.percentile(data_exposed.wt, [percentile_lower, percentile_upper])
@@ -325,12 +354,32 @@ def filter_data_for_regression(data, config):
     return data.loc[sel]
 
 
-if __name__ == '__main__':
+def main(
+        *,
+        dir_marked_data,
+        dir_raw_data,
+        config_dir,
+        dir_reports
+):
+    """
 
-    dir_in = '/Users/boris/devel/faers/data/interim/marked_data/'
-    config_items = QuestionConfig.load_config_items('../config/')
+    Generate reports
+
+    :param str dir_marked_data:
+        marked data directory
+    :param str dir_raw_data:
+        raw data directory
+    :param str config_dir: 
+        config directory
+    :param str dir_reports:
+        output directory
+    :return:
+
+    """
+
+    config_items = QuestionConfig.load_config_items(config_dir)
     for config in tqdm.tqdm(config_items):
-        files = sorted(glob(os.path.join(dir_in, '*.pkl')))
+        files = sorted(glob(os.path.join(dir_marked_data, '*.pkl')))
         data = []
         for f in sorted(files):
             curr = pickle.load(open(f, 'rb'))
@@ -341,12 +390,17 @@ if __name__ == '__main__':
             ]
             data.append(curr[columns_to_keep])
         data = pd.concat(data)
-        reporter = Reporter(config, '/Users/boris/temp/reports')
-        reporter.report(data, '01 Initial data')
+        reporter = Reporter(config, dir_reports, dir_raw_data=dir_raw_data)
+        reporter.report(data, '01 Initial data', explanation='Raw data', skip_lr=True, config=config)
 
         data = filter_illegal_values(data)
-        reporter.report(data, '02 Filtered', explanation='After filtering out weight and age values that make no sense')
+        reporter.report(data, '02 Filtered', config=config,
+                        explanation='After filtering out weight and age values that make no sense')
 
         data = filter_data_for_regression(data, config)
-        reporter.report(data, '03 Stratified for LR', explanation='After filtering out age and weight values that do not fit 99 percentile of the exposed population')
+        reporter.report(data, '03 Stratified for LR', config=config,
+                        explanation='After filtering out age and weight values that do not fit 99 percentile of the exposed population')
 
+
+if __name__ == '__main__':
+    defopt.run(main)

@@ -1,21 +1,14 @@
-import base64
 import os
 import shutil
 from glob import glob
-from multiprocessing.dummy import Pool as ThreadPool
 
 import defopt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import statsmodels.api as sm
-
-from matplotlib import pylab as plt
-import pickle
-from IPython.display import *
-import seaborn.apionly as sns
-import io
 import tqdm
-from statsmodels.nonparametric.kde import KDEUnivariate
+from matplotlib import pylab as plt
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 from src.utils import QuestionConfig, html_from_fig
@@ -83,8 +76,6 @@ def regression_data_summary(df_regression, title=None):
     return ret
 
 
-
-
 from statsmodels.nonparametric.kde import KDEUnivariate
 
 
@@ -134,9 +125,9 @@ def graph_summary_of_regression_data(df_regression):
                 data = df_regression.loc[
                     (df_regression.exposure == exposure) &
                     (df_regression.side_effect == side_effect)
-                ]
-    #             if len(data) > 10000:
-    #                 data = data.sample(10000)
+                    ]
+                #             if len(data) > 10000:
+                #                 data = data.sample(10000)
                 data = data[variable]
                 if exposure:
                     ttl_exp = 'Exposed'
@@ -160,7 +151,6 @@ def graph_summary_of_regression_data(df_regression):
                     ax.set_xlabel(xlabel)
         html_figures.append(html_from_fig(fig))
     return '\n<br>\n'.join(html_figures)
-
 
 
 def filter_regression_table(df_regression, percentile=99):

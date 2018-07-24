@@ -2,21 +2,21 @@ import os
 import shutil
 import warnings
 
-import pandas as pd
 import defopt
-from matplotlib import pylab as plt
-import seaborn.apionly as sns
-import tqdm
 import numpy as np
+import pandas as pd
+import seaborn as sns
+import tqdm
+from matplotlib import pylab as plt
 
 from src.utils import ContingencyMatrix, QuestionConfig
 
 
 def plot_incidence(tbl_report, ax=None, figwidth=8, dpi=300):
     if ax is None:
-        figsize=(figwidth, figwidth / 1.618)
+        figsize = (figwidth, figwidth / 1.618)
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    quarters = list(sorted(tbl_report.q.unique())) # we assume no Q is missing
+    quarters = list(sorted(tbl_report.q.unique()))  # we assume no Q is missing
     quarters
     x = list(range(len(quarters)))
     reports = tbl_report.True_True + tbl_report.True_False
@@ -44,10 +44,10 @@ def plot_incidence(tbl_report, ax=None, figwidth=8, dpi=300):
 
 
 def plot_ror(tbl_report, ax_ror=None, xticklabels=True, figwidth=8, dpi=300):
-    figsize=(figwidth, figwidth / 1.618)
+    figsize = (figwidth, figwidth / 1.618)
     if ax_ror is None:
         fig_ror, ax_ror = plt.subplots(figsize=figsize, dpi=dpi)
-    quarters = list(sorted(tbl_report.q.unique())) # we assume no Q is missing
+    quarters = list(sorted(tbl_report.q.unique()))  # we assume no Q is missing
     x = list(range(len(quarters)))
 
     ax_ror.plot(x, tbl_report.l10_ROR, '-o', color='C0', zorder=99)
@@ -113,7 +113,6 @@ def save_fig(fig, dir_out, n, name, formats):
         fig.savefig(fn, facecolor=fig.get_facecolor())
 
 
-
 def summary_table(contingency_matrices, alpha, smoothing):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -142,9 +141,6 @@ def summary_table(contingency_matrices, alpha, smoothing):
     return tbl_report
 
 
-
-
-
 def generate_individual_report(config, fn_in, dir_reports, alpha, smoothing, title_in_figure=True):
     # load the data
     df_contingency = pd.read_csv(fn_in)
@@ -156,10 +152,8 @@ def generate_individual_report(config, fn_in, dir_reports, alpha, smoothing, tit
         name = config.name
     if title_in_figure:
         fig.suptitle(name)
-    save_fig(fig=fig, dir_out=dir_reports, n=1, name=name, formats=['png', 'eps'])
+    save_fig(fig=fig, dir_out=dir_reports, n=1, name=name, formats=['png'])
     return df_summary
-
-
 
 
 def main(
@@ -201,7 +195,9 @@ def main(
         results = dict()
         for config in tqdm.tqdm(config_items):
             fn_in = config.filename_from_config(dir_contingency)
-            df_summary_curr = generate_individual_report(config=config, fn_in=fn_in, dir_reports=dir_reports, alpha=alpha, smoothing=smoothing, title_in_figure=title_in_figure)
+            df_summary_curr = generate_individual_report(config=config, fn_in=fn_in, dir_reports=dir_reports,
+                                                         alpha=alpha, smoothing=smoothing,
+                                                         title_in_figure=title_in_figure)
             df_summary_curr['config'] = config.name
             results[config.name] = df_summary_curr
         columns = ['q', 'config', 'ROR_lower', 'ROR', 'ROR_upper']
@@ -235,9 +231,9 @@ def main(
         raise err
 
 
-
 if __name__ == '__main__':
     import sys
-    for s in [0,]:
+
+    for s in [0, ]:
         sys.argv = f'src/generate_reports.py --dir-contingency=/Users/boris/devel/faers/data/interim/contingency --config-dir=/Users/boris/devel/faers/config --dir-reports=/Users/boris/devel/faers/data/processed/reports --smoothing {s}'.split()
         defopt.run(main)

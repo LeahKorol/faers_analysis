@@ -5,7 +5,7 @@ import pickle
 
 import pandas as pd
 import defopt
-from pathos.multiprocessing import ProcessingPool as Pool
+from pathos.multiprocessing import ThreadPool as Pool
 import tqdm
 
 from src import utils
@@ -32,13 +32,18 @@ def mark_reaction_data(df, reaction_types):
 
 def mark_data(df_drug, df_reac, df_demo, config_items):
     cols_to_collect = list(df_demo.columns)
-    df_merged = df_demo.join(df_reac).join(df_drug).dropna()
+    df_merged = df_demo.join(df_reac).join(df_drug)
     for config in config_items:
-        drug_columns = [f'drug {drug}' for drug in config.drugs]
-        exposed = f'exposed {config.name}'
+        drugs_curr = set(config.drugs)
+        drug_columns = [f'drug {drug}' for drug in drugs_curr]
+        exposed = f'drug {config.name}'
         df_merged[exposed] = df_merged[drug_columns].any(axis=1)
         cols_to_collect.append(exposed)
-
+        if config.control is not None:
+            control_columns = [f'drug {drug}' for drug in config.control]
+            control = f'control {config.name}'
+            df_merged[control] = df_merged[control_columns].any(axis=1)
+            cols_to_collect.append(control)
         reaction_columns = [f'reaction {reaction}' for reaction in config.reactions]
         reacted = f'reacted {config.name}'
         df_merged[reacted] = df_merged[reaction_columns].any(axis=1)
@@ -117,7 +122,7 @@ def main(
 
     dir_out = os.path.abspath(dir_out)
     os.makedirs(dir_out, exist_ok=True)
-    try:
+    if True: #try:
         q_from = Quarter(year_q_from)
         q_to = Quarter(year_q_to)
         config_items = QuestionConfig.load_config_items(config_dir)
@@ -125,14 +130,24 @@ def main(
         reaction_types = set()
         for config in config_items:
             drug_names.update(set(config.drugs))
+            if config.control is not None:
+                drug_names.update(set(config.control))
             reaction_types.update(set(config.reactions))
         print(f'Will analyze {len(drug_names)} drugs and {len(reaction_types)} reactions')
         quarters = list(generate_quarters(q_from, q_to))
-        for q in tqdm.tqdm(quarters):
-            process_quarter(q, dir_in=dir_in, dir_out=dir_out, config_items=config_items, drug_names=drug_names, reaction_types=reaction_types)
+        with Pool(threads) as pool:
+            _ = list(
+                tqdm.tqdm(
+                    pool.imap(
+                        lambda q: process_quarter(q, dir_in=dir_in, dir_out=dir_out, config_items=config_items, drug_names=drug_names, reaction_types=reaction_types),
+                        quarters
+                    ),
+                    total=len(quarters)
+                )
+            )
 
 
-    except Exception as err:
+    else: #except Exception as err:
         if clean_on_failure:
             shutil.rmtree(dir_out)
         raise err

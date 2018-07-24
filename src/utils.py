@@ -118,7 +118,7 @@ class ContingencyMatrix:
 
     @classmethod
     def from_results_table(cls, data, config):
-        exposure = data[f'exposed {config.name}']
+        exposure = data[f'drug {config.name}']
         exposure.name = 'exposure'
         outcome = data[f'reacted {config.name}']
         outcome.name = 'outcome'
@@ -183,10 +183,11 @@ class ContingencyMatrix:
 
 
 class QuestionConfig:
-    def __init__(self, name, drugs, reactions):
+    def __init__(self, name, drugs, reactions, control):
         self.name = name
         self.drugs = drugs
         self.reactions = reactions
+        self.control = control
 
     @classmethod
     def load_config_items(cls, dir_config):
@@ -212,7 +213,11 @@ class QuestionConfig:
         config = json.load(open(fn))
         drugs = [cls.normalize_drug_name(d) for d in config['drug']]
         reactions = [cls.normalize_reaction_name(r) for r in config['reaction']]
-        return QuestionConfig(name, drugs=drugs, reactions=reactions)
+        if 'control' in config:
+            control = [cls.normalize_drug_name(d) for d in config['control']]
+        else:
+            control = None
+        return QuestionConfig(name, drugs=drugs, reactions=reactions, control=control)
 
     @classmethod
     def configs_from_excel_file(cls, fn):
@@ -221,16 +226,21 @@ class QuestionConfig:
         ret = []
         for sheetname in xl.sheet_names:
             tbl = xl.parse(sheetname)
-            tbl.columns = [c.lower() for c in tbl.columns]
-            if len(tbl.columns) != 2:
+            tbl.columns = [c.lower().strip() for c in tbl.columns]
+            if len(tbl.columns) > 3:
                 logging.warning(f'Skipping {fn} sheet {sheetname} that has {len(tbl.columns)} columns')
                 continue
             drugs = tbl['drug'].dropna().tolist()
             reactions = tbl['reaction'].dropna().tolist()
             drugs = [cls.normalize_drug_name(d) for d in drugs]
             reactions = [cls.normalize_reaction_name(r) for r in reactions]
+            if len(tbl.columns) == 3:
+                control = [cls.normalize_drug_name(d) for d in tbl['control'].dropna().tolist()]
+            else:
+                control = None
             ret.append(QuestionConfig(f'{name} - {sheetname}',
-                                      drugs=drugs, reactions=reactions
+                                      drugs=drugs, reactions=reactions,
+                                      control=control
                                       ))
         return ret
 
