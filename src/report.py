@@ -240,10 +240,19 @@ class Reporter:
         html_table = summary_table.to_html(index=False)
         additional_rows = []
         cases_with_outcome = set(data.loc[data[col_ouctome]].index)
-        n_serious = self.count_serious_outcomes(cases_with_outcome)
-        p_serious = 100 * n_serious / len(cases_with_outcome)
         additional_rows.append(
-            f'Of {len(data):,d} cases, {len(cases_with_outcome):,d} had a reaction. Of them {n_serious:,d} ({p_serious:.1f}%) were serious ones')
+            f'Of {len(data):,d} cases, {len(cases_with_outcome):,d} had a reaction.'
+        )
+        n_exposed = data[col_exposure].sum()
+        reports_with_exposure = set(data.loc[data[col_exposure]].index)
+        cases_with_outcome_and_exposure = cases_with_outcome.intersection(reports_with_exposure)
+        n_serious = self.count_serious_outcomes(cases_with_outcome_and_exposure)
+        p_serious = 100 * n_serious / n_exposed
+        additional_rows.append(
+            f'Number of people who were exposed to the drug: {n_exposed}. '
+            f'Of them, {len(cases_with_outcome)} developed a reaction. kjlkjlkjlk'
+            f'Of them, {n_serious} ({p_serious:.1f}%) had a serious reaction'
+        )
 
         ret = '<h4>Demographic summary</h4>\n' + html_table + '<br>\n'.join(additional_rows)
 
@@ -394,7 +403,7 @@ def main(
         reporter.report(data, '01 Initial data', explanation='Raw data', skip_lr=True, config=config)
 
         data = filter_illegal_values(data)
-        reporter.report(data, '02 Filtered', config=config,
+        reporter.report(data, '02 Filtered', config=config, skip_lr=True,
                         explanation='After filtering out weight and age values that make no sense')
 
         data = filter_data_for_regression(data, config)
