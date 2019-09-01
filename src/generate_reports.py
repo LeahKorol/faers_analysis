@@ -152,7 +152,7 @@ def generate_individual_report(config, fn_in, dir_reports, alpha, smoothing, tit
         name = config.name
     if title_in_figure:
         fig.suptitle(name)
-    save_fig(fig=fig, dir_out=dir_reports, n=1, name=name, formats=['png'])
+    save_fig(fig=fig, dir_out=dir_reports, n=1, name=name, formats=['png', 'tiff'])
     return df_summary
 
 
@@ -234,6 +234,5 @@ def main(
 if __name__ == '__main__':
     import sys
 
-    for s in [0, ]:
-        sys.argv = f'src/generate_reports.py --dir-contingency=/Users/boris/devel/faers/data/interim/contingency --config-dir=/Users/boris/devel/faers/config --dir-reports=/Users/boris/devel/faers/data/processed/reports --smoothing {s}'.split()
-        defopt.run(main)
+    sys.argv = 'src/generate_reports.py --dir-contingency=/Users/boris/devel/faers/data/interim/contingency --config-dir=/Users/boris/devel/faers/config --dir-reports=/Users/boris/devel/faers/data/processed/reports --smoothing 0'.split()
+    defopt.run(main)

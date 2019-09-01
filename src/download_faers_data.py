@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import urllib
@@ -12,7 +13,7 @@ def quarter_urls(quarter):
     ret = []
     year = quarter.year
     yearquarter = str(quarter)
-    what = ['demo', 'drug', 'reac', 'outc', 'indi']
+    what = ['demo', 'drug', 'reac', 'outc', 'indi', 'ther']
     for w in what:
         tmplt = f'http://www.nber.org/fda/faers/{year}/{w}{yearquarter}.csv.zip'
         ret.append(tmplt)
@@ -28,6 +29,7 @@ def download_url(url, dir_out):
         url,
         fn_out
     )
+    logging.info(f'Saved {fn_out}')
     assert os.path.exists(fn_out)
 
 
@@ -57,7 +59,6 @@ def main(
     :return: None
 
     """
-
     dir_out = os.path.abspath(dir_out)
     os.makedirs(dir_out, exist_ok=True)
     try:
@@ -66,6 +67,7 @@ def main(
         urls = []
         for q in generate_quarters(q_first, q_last):
             urls.extend(quarter_urls(q))
+
         print(f'will download {len(urls)} urls')
         with ThreadPool(threads) as pool:
             _ = list(tqdm.tqdm(pool.imap(lambda url: download_url(url, dir_out), urls), total=len(urls)))

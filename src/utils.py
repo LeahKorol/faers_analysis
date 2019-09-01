@@ -295,3 +295,24 @@ def read_demo_data(fn_demo, **kwargs):
     df_demo['event_date'] = pd.to_datetime(df_demo.event_dt_num, dayfirst=False, errors='ignore')
     df_demo.drop(['age_cod', 'wt_cod', 'event_dt_num'], axis=1, inplace=True)
     return df_demo
+
+
+def read_therapy_data(fn_therapy, **kwargs):
+    dtypes = {
+        "caseid": str,
+        "dur": float,
+        "dur_cod": str
+    }
+    df_therapy = pd.read_csv(fn_therapy, dtypes=dtypes, usecols=dtypes.keys(), **kwargs)
+    to_day_conversion_factor = {
+        'MON': 30.5,
+        'YR' : 365.25,
+        'WK' : 7,
+        'DAY': 1,
+        'HR' : 1 / 24.0,
+        'MIN': 1 / 24.0 / 60
+    }
+    to_day_conversion_factor = pd.Series(to_day_conversion_factor)
+    df_therapy['to_day_factor'] = to_day_conversion_factor.reindex(df_therapy.dur_cod)
+    df_therapy['duration_days'] = df_therapy.dur * df_therapy.to_day_factor
+    return df_therapy[['caseid', 'duration_days']]

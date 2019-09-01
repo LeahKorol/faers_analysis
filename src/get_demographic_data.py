@@ -6,7 +6,7 @@ import defopt
 import pandas as pd
 import tqdm
 import numpy as np
-from src.utils import Quarter, QuestionConfig, generate_quarters
+from src.utils import Quarter, QuestionConfig, generate_quarters, read_demo_data, read_therapy_data
 
 
 def get_relevant_cases(fn_marked, config, nrows=None):
@@ -40,7 +40,7 @@ def get_relevant_cases(fn_marked, config, nrows=None):
         ]
 
 
-def process_a_config(q_start, q_end, dir_marked_data, dir_raw_demography_data, dir_out, config):
+def process_a_config(q_start, q_end, dir_marked_data, dir_raw_data, dir_out, config):
     os.makedirs(dir_out, exist_ok=True)
     quarters = list(generate_quarters(q_start, q_end))
     row = np.random.randint(1, 10)
@@ -49,11 +49,17 @@ def process_a_config(q_start, q_end, dir_marked_data, dir_raw_demography_data, d
         desc=config.name
     ):
         fn_marked = os.path.join(dir_marked_data, f'{q}.csv')
-        fn_demo = os.path.join(dir_raw_demography_data, f'demo{q}.csv.zip')
+        fn_demo = os.path.join(dir_raw_data, f'demo{q}.csv.zip')
+        fn_therapy = os.path.join(dir_raw_data, f'ther{q}.csv.zip')
         df_cases = get_relevant_cases(fn_marked, config)
         df_demo = read_demo_data(fn_demo)
+        df_therapy = read_therapy_data(fn_therapy)
         df_cases = df_cases.merge(
             df_demo,
+            on='caseid',
+            how='left'
+        ).merge(
+            df_therapy,
             on='caseid',
             how='left'
         )
@@ -68,7 +74,7 @@ def main(
         year_q_from,
         year_q_to,
         dir_marked_data,
-        dir_raw_demography_data,
+        dir_raw_data,
         dir_config,
         dir_out,
         threads=4,
@@ -83,7 +89,7 @@ def main(
         Input directory, where marked report files are stored
     :param str dir_config:
         Input directory, where config files are stored
-    :param str dir_raw_demography_data:
+    :param str dir_raw_data:
         Input directory, where the raw demography data is stored
     :param str dir_out:
         Output directory
@@ -107,7 +113,7 @@ def main(
                     pool.imap(
                         lambda config: process_a_config(
                             q_start=q_from, q_end=q_to, dir_marked_data=dir_marked_data,
-                            dir_raw_demography_data=dir_raw_demography_data, dir_out=dir_out,
+                            dir_raw_data=dir_raw_data, dir_out=dir_out,
                             config=config
                         ),
                         configs
