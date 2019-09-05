@@ -18,7 +18,7 @@ from src.utils import html_from_fig, ContingencyMatrix, QuestionConfig
 class Reporter:
     FORMATS = ['png']
 
-    def __init__(self, config, dir_out, dir_raw_data):
+    def __init__(self, config, dir_out, dir_raw_data, output_raw_exposure_data):
         self.config = config
         self.title = config.name
         self.dir_out = os.path.join(dir_out, self.title)
@@ -29,6 +29,7 @@ class Reporter:
                     self.dir_out, format_
                 ), exist_ok=True)
         self.figure_count = 0
+        self.output_raw_exposure_data = output_raw_exposure_data
 
     def subplots(self, nrows=1, ncols=1, figsize=(8, 6), dpi=360):
         return plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, dpi=dpi)
@@ -52,6 +53,8 @@ class Reporter:
         if explanation is not None:
             lines.append(explanation)
         data = self.handle_controls(data, config)
+        config_summary = self.summarize_config(config)
+        lines.append(config_summary)
         summary = self.summarize_data(data, title, config, skip_lr=skip_lr)
         lines.append(summary)
         fn = os.path.join(self.dir_out, f'report {self.config.name} {title}.html')
@@ -62,10 +65,21 @@ class Reporter:
         if config.control is None:
             return data
         control_col = f'control {config.name}'
-        col_exposure = f'drug {config.name}'
+        col_exposure = f'exposed {config.name}'
         sel = data[control_col] | data[col_exposure]
         print(f'{config.name:40s}: Due to control handling, removing {(1-sel.mean())*100:.1f}% of lines')
         return data.loc[sel]
+
+    def summarize_config(self, config:QuestionConfig):
+        lines = ['<H2>%s</H2>' % config.name]
+        str_drugs = ', '.join(sorted(config.drugs))
+        str_reactions = ', '.join(sorted(config.reactions))
+        lines.append(f'Drugs: {str_drugs}<br>')
+        if config.control is not None:
+            str_control = ', '.join(config.control)
+            lines.append(f'Controls {str_control}<br>')
+        lines.append(f'Reactions: {str_reactions}<br>')
+        return '\n'.join(lines)
 
     def summarize_data(self, data, title, config, skip_lr=False):
         lines = ['<H2>%s</H2>' % title]
@@ -73,13 +87,14 @@ class Reporter:
         lines.append(self.ror_dynamics(data))
         if not skip_lr:
             lines.append(self.regression_analysis(data))
-        lines.append(self.true_true(data, config))
+        if self.output_raw_exposure_data:
+            lines.append(self.true_true(data, config))
 
         return '\n'.join(lines)
 
     def true_true(self, data, config):
         lines = ['<h3> True-True cases </h3>']
-        col_exposure = f'drug {config.name}'
+        col_exposure = f'exposed {config.name}'
         col_ouctome = f'reacted {config.name}'
         true_true_data = data.loc[
             data[col_exposure] & data[col_ouctome]
@@ -89,21 +104,21 @@ class Reporter:
         true_true_data.index += 1
         lines.append(true_true_data.to_html())
 
-        lines.append('<h3>True-False cases</h3>')
-        true_false_data = data.loc[
-            data[col_exposure] & (~data[col_ouctome])
-            ][['age', 'wt', 'sex', 'event_date', 'q']].reset_index()
-        for c in ['age', 'wt']:
-            true_false_data[c] = np.round(true_false_data[c], 1)
-        true_false_data.index += 1
-        lines.append(true_false_data.to_html())
+        # lines.append('<h3>True-False cases</h3>')
+        # true_false_data = data.loc[
+        #     data[col_exposure] & (~data[col_ouctome])
+        #     ][['age', 'wt', 'sex', 'event_date', 'q']].reset_index()
+        # for c in ['age', 'wt']:
+        #     true_false_data[c] = np.round(true_false_data[c], 1)
+        # true_false_data.index += 1
+        # lines.append(true_false_data.to_html())
 
         return '\n'.join(lines)
 
     def regression_analysis(self, data_regression):
         config = self.config
         data_regression = data_regression.copy()
-        col_exposure = f'drug {config.name}'
+        col_exposure = f'exposed {config.name}'
         col_ouctome = f'reacted {config.name}'
 
         data_regression['exposure'] = data_regression[col_exposure].astype(int)
@@ -186,7 +201,7 @@ class Reporter:
 
     def demographic_table(self, data):
         config = self.config
-        col_exposure = f'drug {config.name}'
+        col_exposure = f'exposed {config.name}'
         col_ouctome = f'reacted {config.name}'
         table_rows = []
         for exposure in 'all', True, False:
@@ -250,7 +265,7 @@ class Reporter:
         p_serious = 100 * n_serious / n_exposed
         additional_rows.append(
             f'Number of people who were exposed to the drug: {n_exposed}. '
-            f'Of them, {len(cases_with_outcome)} developed a reaction. kjlkjlkjlk'
+            f'Of them, {len(cases_with_outcome)} developed a reaction. '
             f'Of them, {n_serious} ({p_serious:.1f}%) had a serious reaction'
         )
 
@@ -292,7 +307,10 @@ class Reporter:
         tbl_report['l10_ROR_upper'] = np.log10(tbl_report.ROR_upper)
 
         ax_ror.plot(x, tbl_report.l10_ROR, '-o', color='C0', zorder=99)
-        ax_ror.fill_between(x, tbl_report.l10_ROR_lower, tbl_report.l10_ROR_upper, color='C0', alpha=0.3)
+        try:
+            ax_ror.fill_between(x, tbl_report.l10_ROR_lower, tbl_report.l10_ROR_upper, color='C0', alpha=0.3)
+        except:
+            return ax_ror
         ax_ror.set_ylim(-2.1, 2.1)
         tkx = [-1, 0, 1]
         ax_ror.set_yticks(tkx)
@@ -350,17 +368,20 @@ def filter_data_for_regression(data, config):
     percentile_lower = (100 - percentile_) / 2
     percentile_upper = 100 - percentile_lower
 
-    col_exposure = f'drug {config.name}'
+    col_exposure = f'exposed {config.name}'
     data_exposed = data.loc[data[col_exposure]]
-    age_from, age_to = np.percentile(data_exposed.age, [percentile_lower, percentile_upper])
-    weight_from, weight_to = np.percentile(data_exposed.wt, [percentile_lower, percentile_upper])
-    sel = (
-                  (data.wt > weight_from) & (data.wt < weight_to)
-          ) & (
-                  (data.age > age_from) & (data.age < age_to)
-          )
-    assert sel.any()
-    return data.loc[sel]
+    if data_exposed.empty:
+        return data.head(0)
+    else:
+        age_from, age_to = np.percentile(data_exposed.age, [percentile_lower, percentile_upper])
+        weight_from, weight_to = np.percentile(data_exposed.wt, [percentile_lower, percentile_upper])
+        sel = (
+                      (data.wt > weight_from) & (data.wt < weight_to)
+              ) & (
+                      (data.age > age_from) & (data.age < age_to)
+              )
+        assert sel.any()
+        return data.loc[sel]
 
 
 def main(
@@ -368,7 +389,8 @@ def main(
         dir_marked_data,
         dir_raw_data,
         config_dir,
-        dir_reports
+        dir_reports,
+        output_raw_exposure_data=False
 ):
     """
 
@@ -382,6 +404,9 @@ def main(
         config directory
     :param str dir_reports:
         output directory
+    :param bool output_raw_exposure_data:
+        whether to include raw table of exposure cases
+
     :return:
 
     """
@@ -399,7 +424,7 @@ def main(
             ]
             data.append(curr[columns_to_keep])
         data = pd.concat(data)
-        reporter = Reporter(config, dir_reports, dir_raw_data=dir_raw_data)
+        reporter = Reporter(config, dir_reports, dir_raw_data=dir_raw_data, output_raw_exposure_data=output_raw_exposure_data)
         reporter.report(data, '01 Initial data', explanation='Raw data', skip_lr=True, config=config)
 
         data = filter_illegal_values(data)

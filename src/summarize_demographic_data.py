@@ -141,7 +141,11 @@ def graph_summary_of_regression_data(df_regression):
                     ttl_se = 'no side effect'
                     keep_x_axis = False
                     xlabel = None
-                ttl = f'{ttl_exp}; {ttl_se}\nN={len(data):,d}; range: {min(data):.1f}-{max(data):.1f}'
+                if not data.empty:
+                    the_range = f'{min(data):.1f}-{max(data):.1f}'
+                else:
+                    the_range = '----'
+                ttl = f'{ttl_exp}; {ttl_se}\nN={len(data):,d}; range: {the_range}'
                 if variable == 'age':
                     mx = 100
                 else:
@@ -160,10 +164,18 @@ def filter_regression_table(df_regression, percentile=99):
         ]
 
     remaining = 100 - percentile
-    lower, upper = np.percentile(df_regression.loc[df_regression.exposure.astype(bool)].wt,
-                                 [remaining / 2, (100 - remaining / 2)])
+    the_values = df_regression.loc[df_regression.exposure.astype(bool)].wt
+    if the_values.empty:
+        return df_regression.head(0)  # keep the column info, just in case
+
+    lower, upper = np.percentile(the_values,
+                                     [remaining / 2, (100 - remaining / 2)])
     sel_wt = (df_regression.wt >= lower) & (df_regression.wt <= upper)
-    lower, upper = np.percentile(df_regression.loc[df_regression.exposure.astype(bool)].age,
+    the_values = df_regression.loc[df_regression.exposure.astype(bool)].age
+    if the_values.empty:
+        return df_regression.head(0)  # keep the column info, just in case
+
+    lower, upper = np.percentile(the_values,
                                  [remaining / 2, (100 - remaining / 2)])
     sel_age = (df_regression.age >= lower) & (df_regression.age <= upper)
     sel = sel_wt & sel_age
@@ -178,27 +190,31 @@ def regression(df_demo, name):
     summary_after = regression_data_summary(df_regression, title='after filtering')
     summary_after = summary_after + '<br>' + graph_summary_of_regression_data(df_regression) + '<br>'
 
-    logit = sm.Logit(df_regression[column_y], df_regression[regression_cols])
-    try:
-        result = logit.fit()
-    except np.linalg.linalg.LinAlgError:
-        html_summary = '<h1>' + name + '</h1>\n ERROR<br>' + summary_before + summary_after
+    if df_regression.empty:
+        html_summary = '<h1>' + name + '</h1>\n EMPTY TABLE<br>'
     else:
-        html_summary = '<h1>' + name + '</h1>\n' \
-                       + summary_before \
-                       + summary_after \
-                       + result.summary(title=name).as_html() \
-                       + '\n<br>\n' \
-                       + colinearity_analysis(df_regression=df_regression, regression_cols=regression_cols, name=None)
+        logit = sm.Logit(df_regression[column_y], df_regression[regression_cols])
+        try:
+            result = logit.fit()
+        except np.linalg.linalg.LinAlgError:
+            html_summary = '<h1>' + name + '</h1>\n ERROR<br>' + summary_before + summary_after
+        else:
+            html_summary = '<h1>' + name + '</h1>\n' \
+                           + summary_before \
+                           + summary_after \
+                           + result.summary(title=name).as_html() \
+                           + '\n<br>\n' \
+                           + colinearity_analysis(df_regression=df_regression, regression_cols=regression_cols, name=None)
 
     return html_summary
 
 
 def summarize_config(config, dir_in, dir_out):
+    DEBUG = None
     dir_demo_data = config.filename_from_config(dir_in, extension='')
     files = glob(os.path.join(dir_demo_data, '*.csv.zip'))
     df_demo = pd.concat(
-        [pd.read_csv(f) for f in files]
+        [pd.read_csv(f, nrows=DEBUG) for f in files]
     )
     rows = []
     for label in ['true_true', 'true_false', 'drug_naive_true', 'drug_naive_false']:

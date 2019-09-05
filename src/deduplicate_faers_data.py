@@ -36,6 +36,7 @@ def main(
 
     """
 
+    assert os.path.isdir(dir_in)
     dir_out = os.path.abspath(dir_out)
     os.makedirs(dir_out)
     try:

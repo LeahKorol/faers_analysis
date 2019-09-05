@@ -89,13 +89,16 @@ def generate_quarters(start, end):
 
 class ContingencyMatrix:
     def __init__(self, tbl=None):
-        if tbl is None:
+        if tbl is None or tbl.empty:
             tbl = pd.DataFrame(columns=['exposure', 'outcome', 'n'])
         else:
             if tbl.shape == (2,2):
-                tbl = pd.melt(
-                    tbl.reset_index().fillna(0), id_vars=['exposure'], value_vars=[False, True], value_name='n'
-                ).set_index(['exposure', 'outcome']).sort_index()
+                try:
+                    tbl = pd.melt(
+                        tbl.reset_index().fillna(0), id_vars=['exposure'], value_vars=[False, True], value_name='n'
+                    ).set_index(['exposure', 'outcome']).sort_index()
+                except:
+                    tbl = pd.DataFrame(columns=['exposure', 'outcome', 'n'])
             else:
 
                 for c in ['exposure', 'outcome', 'n']:
@@ -118,7 +121,7 @@ class ContingencyMatrix:
 
     @classmethod
     def from_results_table(cls, data, config):
-        exposure = data[f'drug {config.name}']
+        exposure = data[f'exposed {config.name}']
         exposure.name = 'exposure'
         outcome = data[f'reacted {config.name}']
         outcome.name = 'outcome'
@@ -201,11 +204,15 @@ class QuestionConfig:
 
     @staticmethod
     def normalize_reaction_name(r):
-        return r.strip().upper()
+        return r.strip().lower()
 
     @staticmethod
     def normalize_drug_name(d):
-        return d.strip().upper()
+        ret =  d.strip().lower()
+        if ret.endswith('.'):
+            ret = ret[:-1]
+        return ret
+
 
     @classmethod
     def config_from_json_file(cls, fn):
@@ -303,7 +310,7 @@ def read_therapy_data(fn_therapy, **kwargs):
         "dur": float,
         "dur_cod": str
     }
-    df_therapy = pd.read_csv(fn_therapy, dtypes=dtypes, usecols=dtypes.keys(), **kwargs)
+    df_therapy = pd.read_csv(fn_therapy, dtype=dtypes, usecols=dtypes.keys(), **kwargs)
     to_day_conversion_factor = {
         'MON': 30.5,
         'YR' : 365.25,
@@ -313,6 +320,6 @@ def read_therapy_data(fn_therapy, **kwargs):
         'MIN': 1 / 24.0 / 60
     }
     to_day_conversion_factor = pd.Series(to_day_conversion_factor)
-    df_therapy['to_day_factor'] = to_day_conversion_factor.reindex(df_therapy.dur_cod)
+    df_therapy['to_day_factor'] = to_day_conversion_factor.reindex(df_therapy.dur_cod).values
     df_therapy['duration_days'] = df_therapy.dur * df_therapy.to_day_factor
     return df_therapy[['caseid', 'duration_days']]

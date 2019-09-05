@@ -1,4 +1,5 @@
 import os
+import pickle
 import shutil
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -10,26 +11,37 @@ from src.utils import Quarter, QuestionConfig, generate_quarters, read_demo_data
 
 
 def get_relevant_cases(fn_marked, config, nrows=None):
-    df_marked = pd.read_csv(
-        fn_marked,
-        nrows=nrows
-    )
+    if fn_marked.endswith('csv'):
+        df_marked = pd.read_csv(
+            fn_marked,
+            nrows=nrows
+        )
+    else:
+        df_marked = pickle.load(open(fn_marked, 'rb'))
+        if nrows is not None:
+            df_marked = df_marked.head(nrows)
+    if 'caseid' not in df_marked.columns:
+        assert df_marked.index.name == 'caseid'
+        df_marked.reset_index(inplace=True)
+
     columns_bookkeeping = ['caseid']
-    columns_info = [c for c in df_marked if c.startswith('drug ') or c.startswith('reaction ')]
+    columns_info = [c for c in df_marked if c.startswith('exposed ') or c.startswith('reacted ')]
     dtypes = {c: str for c in columns_bookkeeping}
     for c in columns_info:
         dtypes[c] = bool
-    df_marked = pd.read_csv(
-        fn_marked,
-        usecols=columns_bookkeeping + columns_info,
-        dtype=dtypes
-    )
 
-    columns_drugs = [f'drug {d}' for d in config.drugs]
-    columns_reactions = [f'reaction {r}' for r in config.reactions]
-    drug_true = df_marked[columns_drugs].any(axis=1)
-    reaction_true = df_marked[columns_reactions].any(axis=1)
-    drug_naive = ~df_marked[columns_drugs].any(axis=1)
+
+    df_marked = df_marked[columns_bookkeeping + columns_info]
+    for c, dt in dtypes.items():
+        df_marked[c] = df_marked[c].astype(dt)
+
+    # columns_drugs = [f'drug {d}' for d in config.drugs]
+    # columns_reactions = [f'reaction {r}' for r in config.reactions]
+    col_exposed = f'exposed {config.name}'
+    col_reacted = f'reacted {config.name}'
+    drug_true = df_marked[col_exposed]
+    reaction_true = df_marked[col_reacted]
+    drug_naive = ~df_marked[col_exposed]
     ret = df_marked[columns_bookkeeping].copy()
     ret['true_true'] = (drug_true & reaction_true).values
     ret['true_false'] = (drug_true & (~reaction_true)).values
@@ -48,7 +60,7 @@ def process_a_config(q_start, q_end, dir_marked_data, dir_raw_data, dir_out, con
         quarters, position=row, leave=False,
         desc=config.name
     ):
-        fn_marked = os.path.join(dir_marked_data, f'{q}.csv')
+        fn_marked = os.path.join(dir_marked_data, f'{q}.pkl')
         fn_demo = os.path.join(dir_raw_data, f'demo{q}.csv.zip')
         fn_therapy = os.path.join(dir_raw_data, f'ther{q}.csv.zip')
         df_cases = get_relevant_cases(fn_marked, config)

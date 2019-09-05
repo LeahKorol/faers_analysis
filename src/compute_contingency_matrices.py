@@ -16,7 +16,7 @@ def count_quarter_incidence(q, dir_in, config_items):
     )
     ret = {}
     for config in config_items:
-        cols_exposure = [f'drug {d}' for d in config.drugs]
+        cols_exposure = [f'exposed {d}' for d in config.drugs]
         exposure = data[['caseid'] + cols_exposure].set_index('caseid')
         exposure = exposure[cols_exposure].any(axis=1)
         exposure = exposure.groupby(exposure.index).apply(any)

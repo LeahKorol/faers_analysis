@@ -15,16 +15,18 @@ from src.utils import Quarter, generate_quarters, QuestionConfig
 
 
 def mark_drug_data(df, drug_names):
+    df.drugname = df.drugname.apply(QuestionConfig.normalize_drug_name)
     for drug in sorted(drug_names):
-        df[f'drug {drug}'] = df.drugname.str.upper() == drug
+        df[f'drug {drug}'] = df.drugname == drug
     drug_columns = [f'drug {drug}' for drug in drug_names]
     ret = df.groupby('caseid')[drug_columns].any()
     return ret
 
 
 def mark_reaction_data(df, reaction_types):
+    df.pt = df.pt.apply(QuestionConfig.normalize_reaction_name)
     for reaction in sorted(reaction_types):
-        df[f'reaction {reaction}'] = df.pt.str.upper() == reaction
+        df[f'reaction {reaction}'] = df.pt == reaction
     reaction_columns = [f'reaction {reaction}' for reaction in reaction_types]
     ret = df.groupby('caseid')[reaction_columns].any()
     return ret
@@ -36,7 +38,7 @@ def mark_data(df_drug, df_reac, df_demo, config_items):
     for config in config_items:
         drugs_curr = set(config.drugs)
         drug_columns = [f'drug {drug}' for drug in drugs_curr]
-        exposed = f'drug {config.name}'
+        exposed = f'exposed {config.name}'
         df_merged[exposed] = df_merged[drug_columns].any(axis=1)
         cols_to_collect.append(exposed)
         if config.control is not None:
@@ -48,14 +50,15 @@ def mark_data(df_drug, df_reac, df_demo, config_items):
         reacted = f'reacted {config.name}'
         df_merged[reacted] = df_merged[reaction_columns].any(axis=1)
         cols_to_collect.append(reacted)
-    ret = df_merged[cols_to_collect]
+    ret = df_merged # [cols_to_collect]
     return ret
 
 
 def process_quarter(q, dir_in, dir_out, config_items, drug_names, reaction_types):
+    DEBUG = None
     fn_drug = os.path.join(dir_in, f'drug{q}.csv.zip')
     df_drug = pd.read_csv(
-        fn_drug, dtype=str
+        fn_drug, dtype=str, nrows=DEBUG
     )[
         ['primaryid', 'caseid', 'drugname']
     ].dropna(
@@ -64,7 +67,7 @@ def process_quarter(q, dir_in, dir_out, config_items, drug_names, reaction_types
 
     fn_reac = os.path.join(dir_in, f'reac{q}.csv.zip')
     df_reac = pd.read_csv(
-        fn_reac, dtype=str
+        fn_reac, dtype=str, nrows=DEBUG
     )[
         ['primaryid', 'caseid', 'pt']
     ].dropna(
@@ -73,7 +76,7 @@ def process_quarter(q, dir_in, dir_out, config_items, drug_names, reaction_types
     df_reac = mark_reaction_data(df_reac, reaction_types)
 
     fn_demo = os.path.join(dir_in, f'demo{q}.csv.zip')
-    df_demo = utils.read_demo_data(fn_demo).set_index('caseid')
+    df_demo = utils.read_demo_data(fn_demo, nrows=DEBUG).set_index('caseid')
     df_demo['q'] = str(q)
     df_marked = mark_data(df_drug=df_drug, df_reac=df_reac, df_demo=df_demo, config_items=config_items)
     pickle.dump(
@@ -94,7 +97,7 @@ def main(
         dir_in,
         config_dir,
         dir_out,
-        threads=4,
+        threads=1,
         clean_on_failure=True
 ):
 
@@ -122,7 +125,7 @@ def main(
 
     dir_out = os.path.abspath(dir_out)
     os.makedirs(dir_out, exist_ok=True)
-    if True: #try:
+    try:
         q_from = Quarter(year_q_from)
         q_to = Quarter(year_q_to)
         config_items = QuestionConfig.load_config_items(config_dir)
@@ -145,9 +148,7 @@ def main(
                     total=len(quarters)
                 )
             )
-
-
-    else: #except Exception as err:
+    except Exception as err:
         if clean_on_failure:
             shutil.rmtree(dir_out)
         raise err
