@@ -323,3 +323,15 @@ def read_therapy_data(fn_therapy, **kwargs):
     df_therapy['to_day_factor'] = to_day_conversion_factor.reindex(df_therapy.dur_cod).values
     df_therapy['duration_days'] = df_therapy.dur * df_therapy.to_day_factor
     return df_therapy[['caseid', 'duration_days']]
+
+
+def compute_df_uniqueness(df, cols=None, do_print=False, print_prefix=None):
+    if do_print and print_prefix is None:
+        print_prefix = ''
+    n_total = len(df)
+    n_unique = len(df.drop_duplicates(subset=cols))
+    n_unique, n_total
+    frac_unique = n_unique / n_total
+    if do_print:
+        print(f'{print_prefix}Of {n_total:6,d} entries {n_unique:6,d} are unique ({frac_unique*100:.1f}%)')
+    return frac_unique
