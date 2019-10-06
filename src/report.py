@@ -12,6 +12,7 @@ from gevent import os
 from matplotlib import pylab as plt
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
+from src import utils
 from src.utils import html_from_fig, ContingencyMatrix, QuestionConfig
 
 
@@ -48,6 +49,7 @@ class Reporter:
         return html
 
     def report(self, data, title, config, explanation=None, skip_lr=False):
+        assert len(set(data.index)) == len(data)
         lines = []
         lines.append(f'<H1>{self.title}</H1>')
         if explanation is not None:
@@ -67,18 +69,18 @@ class Reporter:
         control_col = f'control {config.name}'
         col_exposure = f'exposed {config.name}'
         sel = data[control_col] | data[col_exposure]
-        print(f'{config.name:40s}: Due to control handling, removing {(1-sel.mean())*100:.1f}% of lines')
+        print(f'{config.name:40s}: Due to control handling, removing {(1 - sel.mean()) * 100:.1f}% of lines')
         return data.loc[sel]
 
-    def summarize_config(self, config:QuestionConfig):
+    def summarize_config(self, config: QuestionConfig):
         lines = ['<H2>%s</H2>' % config.name]
         str_drugs = ', '.join(sorted(config.drugs))
         str_reactions = ', '.join(sorted(config.reactions))
-        lines.append(f'Drugs: {str_drugs}<br>')
+        lines.append(f'<strong>Drugs:</strong> {str_drugs}<br>')
         if config.control is not None:
             str_control = ', '.join(config.control)
-            lines.append(f'Controls {str_control}<br>')
-        lines.append(f'Reactions: {str_reactions}<br>')
+            lines.append(f'<strong>Controls:</strong> {str_control}<br>')
+        lines.append(f'<strong>Reactions:</strong> {str_reactions}<br>')
         return '\n'.join(lines)
 
     def summarize_data(self, data, title, config, skip_lr=False):
@@ -96,20 +98,23 @@ class Reporter:
         lines = ['<h3> True-True cases </h3>']
         col_exposure = f'exposed {config.name}'
         col_ouctome = f'reacted {config.name}'
+        cols_data = [c for c in ['age', 'wt', 'sex', 'event_date', 'q'] if c in data]
         true_true_data = data.loc[
             data[col_exposure] & data[col_ouctome]
-            ][['age', 'wt', 'sex', 'event_date', 'q']].reset_index()
+            ][cols_data].reset_index()
         for c in ['age', 'wt']:
-            true_true_data[c] = np.round(true_true_data[c], 1)
+            if c in true_true_data:
+                true_true_data[c] = np.round(true_true_data[c], 1)
         true_true_data.index += 1
         lines.append(true_true_data.to_html())
 
         # lines.append('<h3>True-False cases</h3>')
         # true_false_data = data.loc[
         #     data[col_exposure] & (~data[col_ouctome])
-        #     ][['age', 'wt', 'sex', 'event_date', 'q']].reset_index()
+        #     ][cols_data].reset_index()
         # for c in ['age', 'wt']:
-        #     true_false_data[c] = np.round(true_false_data[c], 1)
+        #     if c in true_false_data:
+        #       true_false_data[c] = np.round(true_false_data[c], 1)
         # true_false_data.index += 1
         # lines.append(true_false_data.to_html())
 
@@ -126,10 +131,15 @@ class Reporter:
         data_regression['is_female'] = (data_regression['sex'] == 'F').astype(int)
         data_regression['intercept'] = 1.0
 
-        regression_cols = ['age', 'is_female', 'wt', 'exposure', 'intercept']
+        regression_cols = ['age', 'is_female', 'exposure', 'intercept']
+        if 'wt' in data_regression.columns:
+            regression_cols.append('wt')
         outcome_col = 'outcome'
         data_regression = data_regression[regression_cols + [outcome_col]]
-        logit = sm.Logit(data_regression[outcome_col], data_regression[regression_cols])
+        try:
+            logit = sm.Logit(data_regression[outcome_col], data_regression[regression_cols])
+        except:
+            assert False
         try:
             result = logit.fit()
         except:
@@ -227,9 +237,14 @@ class Reporter:
                     age_mean = data_row.age.mean()
                     age_std = data_row.age.std(ddof=1)
                     age_range = f'{data_row.age.min():.1f} - {data_row.age.max():.1f}'
-                    weight_mean = data_row.wt.mean()
-                    weight_std = data_row.wt.std(ddof=1)
-                    weight_range = f'{data_row.wt.min():.1f} - {data_row.wt.max():.1f}'
+                    if 'wt' in data.columns:
+                        weight_mean = data_row.wt.mean()
+                        weight_std = data_row.wt.std(ddof=1)
+                        str_weight = f'{weight_mean:.1f}({weight_std:.1f})'
+                        weight_range = f'{data_row.wt.min():.1f} - {data_row.wt.max():.1f}'
+                    else:
+                        str_weight = ''
+                        weight_range = ''
                     if gender == 'all':
                         percent_female = 100 * (data_row.sex == 'F').mean()
                         percent_male = 100 * (data_row.sex == 'M').mean()
@@ -241,7 +256,7 @@ class Reporter:
                         n,
                         f'{age_mean:.1f}({age_std:.1f})',
                         age_range,
-                        f'{weight_mean:.1f}({weight_std:.1f})',
+                        str_weight,
                         weight_range,
                         female_to_male
                     ])
@@ -277,15 +292,16 @@ class Reporter:
         lines = []
         lines.append('<H3>ROR data</H3>')
         config = self.config
-        gr = data.groupby('q')
         rors = []
+        columns_to_keep = ['age', 'sex', 'event_date', 'q'] + [
+            c for c in data.columns if c.endswith(config.name)
+        ]
+        if 'wt' in data.columns:
+            columns_to_keep.append('wt')
         ror_data = pd.DataFrame()
+        gr = data[columns_to_keep].groupby('q')
         for q, curr in sorted(gr):
-            curr['q'] = q
-            columns_to_keep = ['age', 'sex', 'wt', 'event_date', 'q'] + [
-                c for c in curr.columns if c.endswith(config.name)
-            ]
-            ror_data = pd.concat((ror_data, curr[columns_to_keep]))
+            ror_data = pd.concat((ror_data, curr))
             contingency_matrix = ContingencyMatrix.from_results_table(ror_data, config)
             ror, (lower, upper) = contingency_matrix.ror()
             rors.append([q, lower, ror, upper])
@@ -314,7 +330,7 @@ class Reporter:
         ax_ror.set_ylim(-2.1, 2.1)
         tkx = [-1, 0, 1]
         ax_ror.set_yticks(tkx)
-        ax_ror.set_yticklabels([f'$\\times {10**t}$' for t in tkx])
+        ax_ror.set_yticklabels([f'$\\times {10 ** t}$' for t in tkx])
         sns.despine(ax=ax_ror)
         ax_ror.spines['bottom'].set_position('zero')
         tkx = []
@@ -359,27 +375,30 @@ def filter_illegal_values(data):
                   (data.wt > 0) & (data.wt < 360)
           ) & (
                   (data.age > 0) & (data.age < 120)
+          ) & (
+                data.sex.isin({'M', 'F'})
           )
     return data.loc[sel]
 
 
-def filter_data_for_regression(data, config):
+def filter_data_for_regression(data, config, including_the_weight=True):
     percentile_ = 99.0
     percentile_lower = (100 - percentile_) / 2
     percentile_upper = 100 - percentile_lower
 
     col_exposure = f'exposed {config.name}'
-    data_exposed = data.loc[data[col_exposure]]
-    if data_exposed.empty:
+    if data.loc[data[col_exposure]].empty:
         return data.head(0)
     else:
-        age_from, age_to = np.percentile(data_exposed.age, [percentile_lower, percentile_upper])
-        weight_from, weight_to = np.percentile(data_exposed.wt, [percentile_lower, percentile_upper])
-        sel = (
-                      (data.wt > weight_from) & (data.wt < weight_to)
-              ) & (
-                      (data.age > age_from) & (data.age < age_to)
-              )
+        age_from, age_to = np.nanpercentile(data.age, [percentile_lower, percentile_upper])
+        sel = (data.sex.isin({'M', 'F'})) & (data.age > age_from) & (data.age < age_to)
+        if including_the_weight:
+            weight_from, weight_to = np.nanpercentile(data.wt, [percentile_lower, percentile_upper])
+            sel = sel & (
+                    (data.wt > weight_from) & (data.wt < weight_to)
+            )
+        else:
+            data.drop('wt', axis=1, inplace=True)
         assert sel.any()
         return data.loc[sel]
 
@@ -412,28 +431,36 @@ def main(
     """
 
     config_items = QuestionConfig.load_config_items(config_dir)
+    files = sorted(glob(os.path.join(dir_marked_data, '*.pkl')))
+    data_all_configs = pd.concat(
+        [
+            pickle.load(open(f, 'rb')) for f in files
+        ]
+    )
     for config in tqdm.tqdm(config_items):
-        files = sorted(glob(os.path.join(dir_marked_data, '*.pkl')))
-        data = []
-        for f in sorted(files):
-            curr = pickle.load(open(f, 'rb'))
-            q = os.path.splitext(os.path.split(f)[-1])[0]
-            curr['q'] = q
-            columns_to_keep = ['age', 'sex', 'wt', 'event_date', 'q'] + [
-                c for c in curr.columns if c.endswith(config.name)
+        print(f'DEBUG {config.name}')
+        columns_to_keep = ['age', 'sex', 'wt', 'event_date', 'q'] + [
+                c for c in data_all_configs.columns if c.endswith(config.name)
             ]
-            data.append(curr[columns_to_keep])
-        data = pd.concat(data)
-        reporter = Reporter(config, dir_reports, dir_raw_data=dir_raw_data, output_raw_exposure_data=output_raw_exposure_data)
+        data = data_all_configs[columns_to_keep]
+        reporter = Reporter(config, dir_reports, dir_raw_data=dir_raw_data,
+                            output_raw_exposure_data=output_raw_exposure_data)
         reporter.report(data, '01 Initial data', explanation='Raw data', skip_lr=True, config=config)
 
         data = filter_illegal_values(data)
-        reporter.report(data, '02 Filtered', config=config, skip_lr=True,
-                        explanation='After filtering out weight and age values that make no sense')
 
-        data = filter_data_for_regression(data, config)
-        reporter.report(data, '03 Stratified for LR', config=config,
+        data_lr = filter_data_for_regression(data, config)
+
+
+        reporter.report(data_lr, '03 Stratified for LR', config=config,
                         explanation='After filtering out age and weight values that do not fit 99 percentile of the exposed population')
+
+        data_lr = filter_data_for_regression(data, config, including_the_weight=False)
+        reporter.report(data_lr, '04 Stratified for LR ignoring weight', config=config,
+                        explanation='After filtering out age values that do not fit 99 percentile '
+                                    'of the exposed population')
+
+
 
 
 if __name__ == '__main__':

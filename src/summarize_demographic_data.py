@@ -168,14 +168,14 @@ def filter_regression_table(df_regression, percentile=99):
     if the_values.empty:
         return df_regression.head(0)  # keep the column info, just in case
 
-    lower, upper = np.percentile(the_values,
+    lower, upper = np.nanpercentile(the_values,
                                      [remaining / 2, (100 - remaining / 2)])
     sel_wt = (df_regression.wt >= lower) & (df_regression.wt <= upper)
     the_values = df_regression.loc[df_regression.exposure.astype(bool)].age
     if the_values.empty:
         return df_regression.head(0)  # keep the column info, just in case
 
-    lower, upper = np.percentile(the_values,
+    lower, upper = np.nanpercentile(the_values,
                                  [remaining / 2, (100 - remaining / 2)])
     sel_age = (df_regression.age >= lower) & (df_regression.age <= upper)
     sel = sel_wt & sel_age

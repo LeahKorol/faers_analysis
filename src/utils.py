@@ -195,7 +195,7 @@ class QuestionConfig:
     @classmethod
     def load_config_items(cls, dir_config):
         ret = []
-        for f in glob(os.path.join(dir_config, '*.json')):
+        for f in sorted(glob(os.path.join(dir_config, '*.json'))):
             ret.append(cls.config_from_json_file(f))
 
         for f in glob(os.path.join(dir_config, '[a-zA-Z0-9]*.xls?')):
