@@ -8,7 +8,7 @@ import pandas as pd
 import seaborn as sns
 import statsmodels.api as sm
 import tqdm
-from gevent import os
+import os
 from matplotlib import pylab as plt
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 

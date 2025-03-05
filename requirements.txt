@@ -1,0 +1,15 @@
+defopt
+jupyter
+jupyter_contrib_nbextensions
+jupyter_nbextensions_configurator
+luigi
+matplotlib
+numpy
+openpyxl
+pandas
+pathos
+seaborn
+streamlit
+sklearn
+statsmodels
+tqdm

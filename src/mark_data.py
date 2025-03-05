@@ -186,16 +186,16 @@ def main(
         quarters = list(generate_quarters(q_from, q_to))
         process_quarters(quarters, dir_in=dir_in, dir_out=dir_out, config_items=config_items, drug_names=drug_names,
                         reaction_types=reaction_types)
-        # with Pool(threads) as pool:
-        #     _ = list(
-        #         tqdm.tqdm(
-        #             pool.imap(
-        #                 lambda q: process_quarter(q, dir_in=dir_in, dir_out=dir_out, config_items=config_items, drug_names=drug_names, reaction_types=reaction_types),
-        #                 quarters
-        #             ),
-        #             total=len(quarters)
-        #         )
-        #     )
+        with Pool(threads) as pool:
+            _ = list(
+                tqdm.tqdm(
+                    pool.imap(
+                        lambda q: process_quarter(q, dir_in=dir_in, dir_out=dir_out, config_items=config_items, drug_names=drug_names, reaction_types=reaction_types),
+                        quarters
+                    ),
+                    total=len(quarters)
+                )
+            )
     except Exception as err:
         if clean_on_failure:
             shutil.rmtree(dir_out)
