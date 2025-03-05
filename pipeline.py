@@ -46,7 +46,7 @@ class Faers_Pipeline(luigi.Task):
             year_q_to=download.year_q_to,
             dir_in=dedup.output().path,
             config_dir=self.config_dir,
-            dir_out=os.path.join(self.dir_interim, "marked_data"),
+            dir_out=os.path.join(self.dir_interim, "marked_data_v2"),
             dependency_params={"deduplicate": dedup.param_kwargs},
         )
         yield marked
@@ -57,7 +57,7 @@ class Faers_Pipeline(luigi.Task):
             dir_marked_data=marked.output().path,
             dir_raw_data=dedup.output().path,
             dir_config=self.config_dir,
-            dir_out=os.path.join(self.dir_interim, "demographic_analysis"),
+            dir_out=os.path.join(self.dir_interim, "demographic_analysis_v2"),
             clean_on_failure=True,
             dependency_params={"mark_the_data": marked.param_kwargs},
             threads=1,
@@ -67,7 +67,7 @@ class Faers_Pipeline(luigi.Task):
         demographic_summary = SummarizeDemographicData(
             dir_demography_data=demographic_data.output().path,
             dir_config=self.config_dir,
-            dir_out=os.path.join(self.dir_interim, "demographic_summary"),
+            dir_out=os.path.join(self.dir_interim, "demographic_summary_v2"),
             clean_on_failure=True,
             dependency_params={"get_demographic_data": demographic_data.param_kwargs},
         )
@@ -135,30 +135,36 @@ class DeduplicateData(luigi.Task):
 class MarkTheData(luigi.Task):
     year_q_from = luigi.Parameter()
     year_q_to = luigi.Parameter()
-    dir_in = luigi.Parameter()
-    config_dir = luigi.Parameter()
-    dir_out = luigi.Parameter()
+    dir_in = luigi.Parameter(default="data/interim/faers_deduplicated")
+    config_dir = luigi.Parameter(default="config")
+    dir_out = luigi.Parameter(default="data/interim/marked_data_v2")
     threads = luigi.IntParameter(default=7)
-    dependency_params = luigi.DictParameter()
+    dependency_params = luigi.DictParameter(default={})
+    version = luigi.Parameter(default="v3")
 
     def requires(self):
-        return [DeduplicateData(**self.dependency_params["deduplicate"])]
-
-    def input(self):
-        return [luigi.LocalTarget(self.dir_in), luigi.LocalTarget(self.config_dir)]
+        return DeduplicateData(**self.dependency_params.get("deduplicate", {}))
 
     def output(self):
-        return luigi.LocalTarget(self.dir_out)
+        return luigi.LocalTarget(os.path.join(self.dir_out, "output.txt"))
 
     def run(self):
+        os.makedirs(self.dir_out, exist_ok=True)
         mark_data.main(
             year_q_from=self.year_q_from,
             year_q_to=self.year_q_to,
-            dir_in=self.input()[0].path,
-            config_dir=self.input()[1].path,
-            dir_out=self.output().path,
+            dir_in=self.dir_in,
+            config_dir=self.config_dir,
+            dir_out=self.dir_out,
             threads=self.threads,
+            clean_on_failure=True,
         )
+        with self.output().open("w") as out_file:
+            out_file.write(
+                f"Processed quarters from {self.year_q_from} to {self.year_q_to}"
+            )
+            out_file.write("\n")
+            out_file.write(f"Version: {self.version}")
 
 
 class GetDemographicData(luigi.Task):
@@ -229,48 +235,43 @@ class SummarizeDemographicData(luigi.Task):
 
 
 class Report(luigi.Task):
-    dir_marked_data = luigi.Parameter()
-    dir_raw_data = luigi.Parameter()
-    config_dir = luigi.Parameter()
-    dir_reports = luigi.Parameter()
-    output_raw_exposure_data = luigi.BoolParameter()
-    dependency_params = luigi.DictParameter()
+    dir_marked_data = luigi.Parameter(default="data/interim/marked_data_v2")
+    dir_raw_data = luigi.Parameter(default="data/interim/faers_deduplicated")
+    config_dir = luigi.Parameter(default="config")
+    dir_reports = luigi.Parameter(default="data/processed/reports")
+    output_raw_exposure_data = luigi.BoolParameter(default=True)
+    dependency_params = luigi.DictParameter(default={})
+    version = luigi.Parameter(default="v3")
 
     def requires(self):
-        return [
-            MarkTheData(**self.dependency_params["mark_the_data"]),
-            DeduplicateData(**self.dependency_params["deduplicate"]),
-        ]
-
-    def input(self):
-        return [
-            luigi.LocalTarget(self.dir_marked_data),
-            luigi.LocalTarget(self.dir_raw_data),
-            luigi.LocalTarget(self.config_dir),
-        ]
+        return MarkTheData(**self.dependency_params.get("mark_the_data", {}))
 
     def output(self):
-        return luigi.LocalTarget(self.dir_reports)
+        return luigi.LocalTarget(os.path.join(self.dir_reports, "output.txt"))
 
     def run(self):
-        dir_marked_data, dir_raw_data, config_dir = [inp.path for inp in self.input()]
+        os.makedirs(self.dir_reports, exist_ok=True)
         report.main(
-            dir_marked_data=dir_marked_data,
-            dir_raw_data=dir_raw_data,
-            config_dir=config_dir,
-            dir_reports=self.output().path,
+            dir_marked_data=self.dir_marked_data,
+            dir_raw_data=self.dir_raw_data,
+            config_dir=self.config_dir,
+            dir_reports=self.dir_reports,
             output_raw_exposure_data=self.output_raw_exposure_data,
         )
+        with self.output().open("w") as out_file:
+            out_file.write(f"Reports generated using data from {self.dir_marked_data}")
+            out_file.write("\n")
+            out_file.write(f"Version: {self.version}")
 
 
-if __name__ == "__main__":
-    luigi.run(
-        [
-            "--local-scheduler",
-            "--Faers-Pipeline-year-q-from",
-            "2015q1",
-            "--Faers-Pipeline-year-q-to",
-            "2022q4",
-        ],
-        main_task_cls=Faers_Pipeline,
-    )
+# if __name__ == "__main__":
+#     luigi.run(
+#         [
+#             "--local-scheduler",
+#             "--Faers-Pipeline-year-q-from",
+#             "2015q1",
+#             "--Faers-Pipeline-year-q-to",
+#             "2015q3",
+#         ],
+#         main_task_cls=Faers_Pipeline,
+#     )
