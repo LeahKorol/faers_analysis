@@ -22,7 +22,8 @@ def quarter_urls(quarter):
         # "ther",
     ]
     for w in what:
-        tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
+        # tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
+        tmplt = f"https://data.nber.org/fda/faers/{year}/{w}{yearquarter}.csv.zip"
         ret.append(tmplt)
     return ret
 
