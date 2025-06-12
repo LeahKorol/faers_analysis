@@ -1,4 +1,5 @@
 import os
+import logging
 
 import luigi
 
@@ -10,6 +11,18 @@ from src import (
     summarize_demographic_data,
     report,
 )
+
+# Ensure logging is configured
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("FAERS")
+logging_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"simple": {"format": "%(levelname)s: %(message)s"}},
+    "handlers": {
+        "stdout": {"class": "logger.StreamHandler", "stream": "ext://sys.stdout"}
+    },
+}
 
 
 class Faers_Pipeline(luigi.Task):
@@ -54,7 +67,7 @@ class Faers_Pipeline(luigi.Task):
         demographic_data = GetDemographicData(
             year_q_from=download.year_q_from,
             year_q_to=download.year_q_to,
-            dir_marked_data=marked.output().path,
+            dir_marked_data=os.path.dirname(marked.output().path),
             dir_raw_data=dedup.output().path,
             dir_config=self.config_dir,
             dir_out=os.path.join(self.dir_interim, "demographic_analysis_v2"),
@@ -65,7 +78,7 @@ class Faers_Pipeline(luigi.Task):
         yield demographic_data
 
         demographic_summary = SummarizeDemographicData(
-            dir_demography_data=demographic_data.output().path,
+            dir_demography_data=os.path.dirname(demographic_data.output().path),
             dir_config=self.config_dir,
             dir_out=os.path.join(self.dir_interim, "demographic_summary_v2"),
             clean_on_failure=True,
@@ -74,7 +87,7 @@ class Faers_Pipeline(luigi.Task):
         yield demographic_summary
 
         yielded_report = Report(
-            dir_marked_data=marked.output().path,
+            dir_marked_data=os.path.dirname(marked.output().path),
             dir_raw_data=dedup.output().path,
             config_dir=self.config_dir,
             dir_reports=self.output().path,
@@ -102,12 +115,26 @@ class DownloadData(luigi.Task):
 
     def run(self):
         self.output().makedirs()
+        logger.info(f"[DownloadData] Expected output directory: {self.output().path}")
         download_faers_data.main(
             year_q_from=self.year_q_from,
             year_q_to=self.year_q_to,
             dir_out=self.output().path,
             threads=self.threads,
         )
+        # After download, log all files that should be present
+        expected_files = download_faers_data.get_expected_filenames(
+            year_q_from=self.year_q_from,
+            year_q_to=self.year_q_to,
+            dir_out=self.output().path,
+        )
+        for fn in expected_files:
+            logger.info(f"[DownloadData] Should have saved: {fn}")
+            if os.path.exists(fn):
+                logger.info(f"[DownloadData] File exists: {fn}")
+            else:
+                logger.error(f"[DownloadData] ERROR: File missing: {fn}")
+                raise FileNotFoundError(f"Expected file not found: {fn}")
         assert os.path.exists(self.output().path)
 
 
@@ -146,7 +173,7 @@ class MarkTheData(luigi.Task):
         return DeduplicateData(**self.dependency_params.get("deduplicate", {}))
 
     def output(self):
-        return luigi.LocalTarget(os.path.join(self.dir_out, "output.txt"))
+        return luigi.LocalTarget(os.path.join(self.dir_out, "_SUCCESS"))
 
     def run(self):
         os.makedirs(self.dir_out, exist_ok=True)
@@ -189,7 +216,7 @@ class GetDemographicData(luigi.Task):
         ]
 
     def output(self):
-        return luigi.LocalTarget(self.dir_out)
+        return luigi.LocalTarget(os.path.join(self.dir_out, "_SUCCESS"))
 
     def run(self):
         dir_raw_data, dir_marked_data, dir_config = [inp.path for inp in self.input()]
@@ -199,10 +226,12 @@ class GetDemographicData(luigi.Task):
             dir_raw_data=dir_raw_data,
             dir_marked_data=dir_marked_data,
             dir_config=dir_config,
-            dir_out=self.output().path,
+            dir_out=self.dir_out,
             threads=self.threads,
             clean_on_failure=self.clean_on_failure,
         )
+        with self.output().open("w") as out_file:
+            out_file.write("success")
 
 
 class SummarizeDemographicData(luigi.Task):
@@ -222,7 +251,7 @@ class SummarizeDemographicData(luigi.Task):
         ]
 
     def output(self):
-        return luigi.LocalTarget(self.dir_out)
+        return luigi.LocalTarget(os.path.join(self.dir_out, "_SUCCESS"))
 
     def run(self):
         dir_demography_data, dir_config = [inp.path for inp in self.input()]
@@ -232,6 +261,8 @@ class SummarizeDemographicData(luigi.Task):
             dir_out=self.dir_out,
             clean_on_failure=self.clean_on_failure,
         )
+        with self.output().open("w") as out_file:
+            out_file.write("success")
 
 
 class Report(luigi.Task):
@@ -264,14 +295,14 @@ class Report(luigi.Task):
             out_file.write(f"Version: {self.version}")
 
 
-# if __name__ == "__main__":
-#     luigi.run(
-#         [
-#             "--local-scheduler",
-#             "--Faers-Pipeline-year-q-from",
-#             "2015q1",
-#             "--Faers-Pipeline-year-q-to",
-#             "2015q3",
-#         ],
-#         main_task_cls=Faers_Pipeline,
-#     )
+if __name__ == "__main__":
+    luigi.run(
+        [
+            "--local-scheduler",
+            "--Faers-Pipeline-year-q-from",
+            "2020q1",
+            "--Faers-Pipeline-year-q-to",
+            "2022q3",
+        ],
+        main_task_cls=Faers_Pipeline,
+    )

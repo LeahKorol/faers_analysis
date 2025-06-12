@@ -86,3 +86,4 @@ notebooks/dask-worker-space
 ~$*.xls*
 ignore
 BACKUP_config
+data_BACKUP/

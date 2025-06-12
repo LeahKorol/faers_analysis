@@ -8,6 +8,8 @@ import tqdm
 
 from src.utils import Quarter, generate_quarters
 
+logger = logging.getLogger("FAERS")
+
 
 def quarter_urls(quarter):
     ret = []
@@ -19,11 +21,12 @@ def quarter_urls(quarter):
         "reac",
         "outc",
         # "indi",
-        # "ther",
+        "ther",
     ]
     for w in what:
         # tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
-        tmplt = f"https://data.nber.org/fda/faers/{year}/{w}{yearquarter}.csv.zip"
+        # tmplt = f"https://data.nber.org/fda/faers/{year}/{w}{yearquarter}.csv.zip"
+        tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
         ret.append(tmplt)
     return ret
 
@@ -31,12 +34,15 @@ def quarter_urls(quarter):
 def download_url(url, dir_out):
     fn_out = os.path.split(url)[-1]
     fn_out = os.path.join(dir_out, fn_out)
+    if os.path.exists(fn_out):
+        logger.debug(f"Skipping {url} because {fn_out} already exists")
+        return
     try:
         urllib.request.urlretrieve(url, fn_out)
     except Exception as err:
-        logging.error(f"Failed to download {url} to {fn_out} {err}")
+        logger.error(f"Failed to download {url} to {fn_out} {err}")
     else:
-        logging.info(f"Saved {fn_out}")
+        logger.info(f"Saved {fn_out}")
         assert os.path.exists(fn_out)
 
 

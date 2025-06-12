@@ -10,6 +10,6 @@ pandas
 pathos
 seaborn
 streamlit
-sklearn
+scikit-learn
 statsmodels
 tqdm

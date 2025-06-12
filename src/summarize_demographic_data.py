@@ -15,64 +15,73 @@ from src.utils import QuestionConfig, html_from_fig
 
 
 def regression_data(df_demo):
-    true_true = df_demo.loc[df_demo.true_true][['age', 'wt', 'sex']].dropna()
-    true_true['side_effect'] = True
-    true_true['exposure'] = 1
+    true_true = df_demo.loc[df_demo.true_true][["age", "wt", "sex"]].dropna()
+    true_true["side_effect"] = True
+    true_true["exposure"] = 1
 
-    true_false = df_demo.loc[df_demo.true_false][['age', 'wt', 'sex']].dropna()
-    true_false['side_effect'] = False
-    true_false['exposure'] = 1
+    true_false = df_demo.loc[df_demo.true_false][["age", "wt", "sex"]].dropna()
+    true_false["side_effect"] = False
+    true_false["exposure"] = 1
 
-    false_true = df_demo.loc[df_demo.drug_naive_true][['age', 'wt', 'sex']].dropna()
-    false_true['exposure'] = 0
-    false_true['side_effect'] = 1
+    false_true = df_demo.loc[df_demo.drug_naive_true][["age", "wt", "sex"]].dropna()
+    false_true["exposure"] = 0
+    false_true["side_effect"] = 1
 
-    false_false = df_demo.loc[df_demo.drug_naive_false][['age', 'wt', 'sex']].dropna()
-    false_false['exposure'] = 0
-    false_false['side_effect'] = 0
+    false_false = df_demo.loc[df_demo.drug_naive_false][["age", "wt", "sex"]].dropna()
+    false_false["exposure"] = 0
+    false_false["side_effect"] = 0
 
-    df_regression = pd.concat([true_true, true_false, false_true, false_false], sort=False).reset_index(drop=True)
-    df_regression['is_female'] = df_regression['sex'] == 'F'
-    df_regression.drop('sex', axis=1, inplace=True)
-    df_regression['intercept'] = 1.0
-    regression_cols = [c for c in df_regression.columns if c != 'side_effect']
+    df_regression = pd.concat(
+        [true_true, true_false, false_true, false_false], sort=False
+    ).reset_index(drop=True)
+    df_regression["is_female"] = df_regression["sex"] == "F"
+    df_regression.drop("sex", axis=1, inplace=True)
+    df_regression["intercept"] = 1.0
+    regression_cols = [c for c in df_regression.columns if c != "side_effect"]
     df_regression.side_effect = df_regression.side_effect.astype(int)
     df_regression.is_female = df_regression.is_female.astype(int)
-    return df_regression, regression_cols, 'side_effect'
+    return df_regression, regression_cols, "side_effect"
 
 
 def colinearity_analysis(df_regression, regression_cols, name=None):
     rows = []
     if name:
-        row = f'{name}: '
+        row = f"{name}: "
     else:
-        row = ''
-    rows.append('<b> ' + row + 'variance inflation factors' + '</b>')
-    rows.append('<table><tbody>')
-    rows.append('''<tr>
+        row = ""
+    rows.append("<b> " + row + "variance inflation factors" + "</b>")
+    rows.append("<table><tbody>")
+    rows.append(
+        """<tr>
 			<th>variable</th>
 			<th>VIF</th>
 		</tr>
-    ''')
+    """
+    )
 
     mat = df_regression[regression_cols].values
     for i in range(len(regression_cols)):
         colname = regression_cols[i]
-        if colname == 'intercept':
+        if colname == "intercept":
             continue
         vif = variance_inflation_factor(mat, i)
-        rows.append(f'<tr><td>{colname:30s}</td><td>{vif:.3f}</td></tr>')
-    rows.append('</tbody></table>')
-    return '\n'.join(rows)
+        rows.append(f"<tr><td>{colname:30s}</td><td>{vif:.3f}</td></tr>")
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
 
 
 def regression_data_summary(df_regression, title=None):
-    crosstab = pd.crosstab(df_regression['exposure'].astype(bool), df_regression['side_effect'].astype(bool))
-    html_crosstab = crosstab.to_html(formatters=[lambda v: f'{v:,d}' for _ in range(crosstab.shape[1])])
+    crosstab = pd.crosstab(
+        df_regression["exposure"].astype(bool),
+        df_regression["side_effect"].astype(bool),
+    )
+    html_crosstab = crosstab.to_html(
+        formatters=[lambda v: f"{v:,d}" for _ in range(crosstab.shape[1])]
+    )
     if title is None:
-        title = ''
-    ret = '<br><h2> crosstabulation %s</h2>\n' % title
-    ret += (html_crosstab + '<br>\n')
+        title = ""
+    ret = "<br><h2> crosstabulation %s</h2>\n" % title
+    ret += html_crosstab + "<br>\n"
     return ret
 
 
@@ -89,11 +98,11 @@ def plot_kde(data, ax=None, keep_x_axis=True, xlim=None, title=None):
         kde.fit()
         x = np.linspace(data.min(), data.max(), 1000)
         y = kde.evaluate(x)
-        ax.fill_between(x, y, color='k', alpha=0.1)
-        ax.plot(x, y, '-', color='k')
+        ax.fill_between(x, y, color="k", alpha=0.1)
+        ax.plot(x, y, "-", color="k")
     else:
         counts = pd.value_counts(data).sort_index()
-        ax.bar(counts.index, counts, color='k', width=0.1)
+        ax.bar(counts.index, counts, color="k", width=0.1)
     sns.despine(ax=ax)
     ax.set_yticks([])
 
@@ -106,47 +115,47 @@ def plot_kde(data, ax=None, keep_x_axis=True, xlim=None, title=None):
         xticks = ax.get_xticks()
         ax.set_xticks([xticks[0], xticks[-1]])
     if title is not None:
-        ax.set_title(title, x=0.01, y=1, ha='left', va='top', ma='left')
+        ax.set_title(title, x=0.01, y=1, ha="left", va="top", ma="left")
     return ax
 
 
 def graph_summary_of_regression_data(df_regression):
     html_figures = []
-    for variable in ['age', 'wt']:
-        if variable == 'wt':
-            variable_name = 'Weight'
-        elif variable == 'age':
-            variable_name = 'Age'
+    for variable in ["age", "wt"]:
+        if variable == "wt":
+            variable_name = "Weight"
+        elif variable == "age":
+            variable_name = "Age"
         else:
             raise RuntimeError()
         fig, axes = plt.subplots(2, 2)
         for side_effect, row_axes in zip([0, 1], axes):
             for exposure, ax in zip([0, 1], row_axes):
                 data = df_regression.loc[
-                    (df_regression.exposure == exposure) &
-                    (df_regression.side_effect == side_effect)
-                    ]
+                    (df_regression.exposure == exposure)
+                    & (df_regression.side_effect == side_effect)
+                ]
                 #             if len(data) > 10000:
                 #                 data = data.sample(10000)
                 data = data[variable]
                 if exposure:
-                    ttl_exp = 'Exposed'
+                    ttl_exp = "Exposed"
                 else:
-                    ttl_exp = 'Not exposed'
+                    ttl_exp = "Not exposed"
                 if side_effect:
-                    ttl_se = 'with side effect'
+                    ttl_se = "with side effect"
                     keep_x_axis = True
                     xlabel = variable_name
                 else:
-                    ttl_se = 'no side effect'
+                    ttl_se = "no side effect"
                     keep_x_axis = False
                     xlabel = None
                 if not data.empty:
-                    the_range = f'{min(data):.1f}-{max(data):.1f}'
+                    the_range = f"{min(data):.1f}-{max(data):.1f}"
                 else:
-                    the_range = '----'
-                ttl = f'{ttl_exp}; {ttl_se}\nN={len(data):,d}; range: {the_range}'
-                if variable == 'age':
+                    the_range = "----"
+                ttl = f"{ttl_exp}; {ttl_se}\nN={len(data):,d}; range: {the_range}"
+                if variable == "age":
                     mx = 100
                 else:
                     mx = 250
@@ -154,29 +163,29 @@ def graph_summary_of_regression_data(df_regression):
                 if xlabel:
                     ax.set_xlabel(xlabel)
         html_figures.append(html_from_fig(fig))
-    return '\n<br>\n'.join(html_figures)
+        plt.close(fig)
+
+    return "\n<br>\n".join(html_figures)
 
 
 def filter_regression_table(df_regression, percentile=99):
     df_regression = df_regression.loc[
-        ((df_regression.age > 0) & (df_regression.age < 120)) &
-        ((df_regression.wt > 0) & df_regression.wt < 320)
-        ]
+        ((df_regression.age > 0) & (df_regression.age < 120))
+        & ((df_regression.wt > 0) & df_regression.wt < 320)
+    ]
 
     remaining = 100 - percentile
     the_values = df_regression.loc[df_regression.exposure.astype(bool)].wt
     if the_values.empty:
         return df_regression.head(0)  # keep the column info, just in case
 
-    lower, upper = np.nanpercentile(the_values,
-                                     [remaining / 2, (100 - remaining / 2)])
+    lower, upper = np.nanpercentile(the_values, [remaining / 2, (100 - remaining / 2)])
     sel_wt = (df_regression.wt >= lower) & (df_regression.wt <= upper)
     the_values = df_regression.loc[df_regression.exposure.astype(bool)].age
     if the_values.empty:
         return df_regression.head(0)  # keep the column info, just in case
 
-    lower, upper = np.nanpercentile(the_values,
-                                 [remaining / 2, (100 - remaining / 2)])
+    lower, upper = np.nanpercentile(the_values, [remaining / 2, (100 - remaining / 2)])
     sel_age = (df_regression.age >= lower) & (df_regression.age <= upper)
     sel = sel_wt & sel_age
     return df_regression.loc[sel]
@@ -185,50 +194,64 @@ def filter_regression_table(df_regression, percentile=99):
 def regression(df_demo, name):
     df_regression, regression_cols, column_y = regression_data(df_demo)
 
-    summary_before = regression_data_summary(df_regression, title='before filtering')
+    summary_before = regression_data_summary(df_regression, title="before filtering")
     df_regression = filter_regression_table(df_regression, percentile=99)
-    summary_after = regression_data_summary(df_regression, title='after filtering')
-    summary_after = summary_after + '<br>' + graph_summary_of_regression_data(df_regression) + '<br>'
+    summary_after = regression_data_summary(df_regression, title="after filtering")
+    summary_after = (
+        summary_after
+        + "<br>"
+        + graph_summary_of_regression_data(df_regression)
+        + "<br>"
+    )
 
     if df_regression.empty:
-        html_summary = '<h1>' + name + '</h1>\n EMPTY TABLE<br>'
+        html_summary = "<h1>" + name + "</h1>\n EMPTY TABLE<br>"
     else:
         logit = sm.Logit(df_regression[column_y], df_regression[regression_cols])
         try:
             result = logit.fit()
         except np.linalg.linalg.LinAlgError:
-            html_summary = '<h1>' + name + '</h1>\n ERROR<br>' + summary_before + summary_after
+            html_summary = (
+                "<h1>" + name + "</h1>\n ERROR<br>" + summary_before + summary_after
+            )
         else:
-            html_summary = '<h1>' + name + '</h1>\n' \
-                           + summary_before \
-                           + summary_after \
-                           + result.summary(title=name).as_html() \
-                           + '\n<br>\n' \
-                           + colinearity_analysis(df_regression=df_regression, regression_cols=regression_cols, name=None)
+            html_summary = (
+                "<h1>"
+                + name
+                + "</h1>\n"
+                + summary_before
+                + summary_after
+                + result.summary(title=name).as_html()
+                + "\n<br>\n"
+                + colinearity_analysis(
+                    df_regression=df_regression,
+                    regression_cols=regression_cols,
+                    name=None,
+                )
+            )
 
     return html_summary
 
 
 def summarize_config(config, dir_in, dir_out):
     DEBUG = None
-    dir_demo_data = config.filename_from_config(dir_in, extension='')
-    files = glob(os.path.join(dir_demo_data, '*.csv.zip'))
-    df_demo = pd.concat(
-        [pd.read_csv(f, nrows=DEBUG) for f in files]
-    )
+    dir_demo_data = config.filename_from_config(dir_in, extension="")
+    files = glob(os.path.join(dir_demo_data, "*.csv.zip"))
+    df_demo = pd.concat([pd.read_csv(f, nrows=DEBUG) for f in files])
     rows = []
-    for label in ['true_true', 'true_false', 'drug_naive_true', 'drug_naive_false']:
-        for variable in ['age', 'wt']:
-            for sex in ['M', 'F', None]:
+    for label in ["true_true", "true_false", "drug_naive_true", "drug_naive_false"]:
+        for variable in ["age", "wt"]:
+            for sex in ["M", "F", None]:
                 sel = df_demo[label]
                 if sex is not None:
-                    sel = sel & (df_demo['sex'] == sex)
+                    sel = sel & (df_demo["sex"] == sex)
                 if not sel.any():
                     row = {
-                        'label': label,
-                        'variable': variable,
-                        'sex': sex if sex else 'all',
-                        'n': 0, 'n_valid': 0
+                        "label": label,
+                        "variable": variable,
+                        "sex": sex if sex else "all",
+                        "n": 0,
+                        "n_valid": 0,
                     }
                     rows.append(row)
                     continue
@@ -237,7 +260,7 @@ def summarize_config(config, dir_in, dir_out):
                 n_missing = pd.isna(values).sum()
                 values = values.dropna()
                 cutoff_min = 0
-                if variable == 'age':
+                if variable == "age":
                     cutoff_max = 120
                 else:
                     cutoff_max = 320
@@ -261,39 +284,42 @@ def summarize_config(config, dir_in, dir_out):
                     kde_values = counts
 
                 row = {
-                    'label': label,
-                    'variable': variable,
-                    'sex': sex if sex else 'all',
-                    'n': n,
-                    'n_missing': n_missing,
-                    'n_valid': n_valid,
-                    'mean': mean_,
-                    'median': median_,
-                    'std': std_,
-                    'kde': (x.tolist(), kde_values.tolist())
+                    "label": label,
+                    "variable": variable,
+                    "sex": sex if sex else "all",
+                    "n": n,
+                    "n_missing": n_missing,
+                    "n_valid": n_valid,
+                    "mean": mean_,
+                    "median": median_,
+                    "std": std_,
+                    "kde": (x.tolist(), kde_values.tolist()),
                 }
                 rows.append(row)
     processed = pd.DataFrame(rows)
     processed = processed[  # give a nice order
         [
-            'label', 'variable', 'sex', 'n', 'n_missing', 'n_valid', 'mean', 'median', 'std', 'kde'
+            "label",
+            "variable",
+            "sex",
+            "n",
+            "n_missing",
+            "n_valid",
+            "mean",
+            "median",
+            "std",
+            "kde",
         ]
     ]
-    fn_out = config.filename_from_config(dir_out, extension='.csv')
+    fn_out = config.filename_from_config(dir_out, extension=".csv")
     processed.to_csv(fn_out, index=False)
 
     html_regression = regression(df_demo, name=config.name)
-    fn_out = config.filename_from_config(dir_out, extension='.html')
-    open(fn_out, 'w').write(html_regression)
+    fn_out = config.filename_from_config(dir_out, extension=".html")
+    open(fn_out, "w").write(html_regression)
 
 
-def main(
-        *,
-        dir_demography_data,
-        dir_config,
-        dir_out,
-        clean_on_failure=False
-):
+def main(*, dir_demography_data, dir_config, dir_out, clean_on_failure=False):
     """
 
     :param str dir_config:
@@ -321,5 +347,5 @@ def main(
         raise err
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     defopt.run(main)
