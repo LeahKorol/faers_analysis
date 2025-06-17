@@ -25,7 +25,12 @@ def quarter_urls(quarter):
     for w in WHAT:
         # tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
         # tmplt = f"https://data.nber.org/fda/faers/{year}/{w}{yearquarter}.csv.zip"
-        tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
+        if year <= 2018:
+            tmplt = (
+                f"https://data.nber.org/fda/faers/{year}/{w}{yearquarter}.csv.zip"
+            )
+        else:
+            tmplt = f"https://data.nber.org/fda/faers/{year}/csv/{w}{yearquarter}.csv.zip"
         ret.append(tmplt)
     return ret
 
